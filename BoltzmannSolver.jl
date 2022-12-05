@@ -1,5 +1,5 @@
 function fRK4(yn, xn)
-    K1 = -g*xn;
+    K1 = -g*xn*yn;
 end
 
 function RK4K2(yn, xn)
