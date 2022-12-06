@@ -1,5 +1,5 @@
 function fRK4(yn, xn)
-    K1 = -g*xn;
+    K1 = lambda*exp(-xn)*(Yeq(xn)^2*exp(-yn)-exp(yn));
 end
 
 function RK4K2(yn, xn)
@@ -27,19 +27,26 @@ function RK4step(yn, xn)
     ynew = yn + Delta_x*(K1 + 2*K2 + 2*K3 + K4)/6;
 end
 
-#Define parameters of RK4 method
-Delta_x = 1E-1;
-x_initial = 0.;
-x_final = 4.;
-Npoints = ceil(Int8,(x_final-x_initial)/Delta_x);
+function Yeq(x)
+    y = 0.145*x^1.5*exp(-x)
+end
 
-#First define initial conditions:
-g = 9.81;
-Y0 = 100*ones(Npoints);
-Yx = copy(Y0);
+#Define parameters of RK4 method
+Delta_x = 1E-4;
+x_initial = 2.;
+x_final = 10;
+Npoints = ceil(Int64,(x_final-x_initial)/Delta_x);
+
+#Define physics parameters
+lambda = 1E10;
+
+#Define initial conditions:
+Yx = zeros(Npoints);
 xvec = collect(x_initial:Delta_x:x_final);
+Yx[1] = log(Yeq(xvec[1]));
 
 for i in 2:Npoints
     Yx[i] = RK4step(Yx[i-1], xvec[i-1]);
 end
 
+Yx
