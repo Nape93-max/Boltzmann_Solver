@@ -8,7 +8,6 @@ function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the n
     W_try_initial = W_old*1.
     W_new = Newton_Raphson_iteration(t, W_old, cs, W_try_initial, g_deg, gS)
     diff = abs(log(W_new/W_try_initial))
-
     while diff > 1E-4 
         W_try = copy(W_new);
         W_new = Newton_Raphson_iteration(t, W_old, cs, W_try, g_deg, gS)
@@ -74,6 +73,6 @@ Yx = exp.(Wx)
 plot(xvec, [EquilibriumYield, Yx], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)"], xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final), ylims = (1E-20, 1E-3))
 savefig("FreezeOut.png")
 
-
 plot(xvec, Yx, xaxis=:log, yaxis=:log)
 savefig("Y_plot.png")
+
