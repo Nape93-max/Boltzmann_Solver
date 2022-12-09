@@ -133,7 +133,11 @@ end
 #Estimate the freeze-out xf:
 xf = freeze_out_estimate(25)
 Y_infty = Yeq(g_quark, h_eff_dof(m_quark/xf), xf)
-println(Y_infty)
+freeze_out_index = findfirst(xvec -> xvec > xf, xvec)
+Y_infty_vec = zeros(Npoints)
+for i = freeze_out_index:Npoints
+    Y_infty_vec[i] = Y_infty
+end
 
 Wx = zeros(Npoints)
 Yx = zeros(Npoints)
@@ -147,9 +151,12 @@ for i = 2:Npoints
 end
 Yx = exp.(Wx)
 
-plot(xvec, [EquilibriumYield, Yx], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)"], xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final), ylims = (1E-20, 1E-3))
+ytics = 10.0.^collect(range(-20, -3, step=1))
+xtics = 10.0.^collect(range(log(x_initial), log(x_final), step=1))
+
+plot(xvec, [EquilibriumYield, Yx, Y_infty_vec], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)" L"Y_\infty = Y_{eq}(x_f)"], yticks = ytics, xticks = xtics, minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final), ylims = (1E-20, 1E-3))
 savefig("FreezeOut.png")
 
-plot(xvec, Yx, xaxis=:log, yaxis=:log)
+plot(xvec, Yx, title="Relic Yield", minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", yticks = ytics, xaxis=:log, yaxis=:log, xticks = xtics, xlims = (x_initial, x_final), ylims = (1E-20, 1E-3))
 savefig("Y_plot.png")
 
