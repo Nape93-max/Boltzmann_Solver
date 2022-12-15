@@ -61,20 +61,20 @@ function h_eff_dof(T)
     end
 end
 
-function aux_func(x, m, acs, cs_xvalues, cs_y_values) #Auxiliary function for the determination of xf. It gives H(xf) - Gamma(xf) ( == 0 at freeze-out)
+function aux_func(x, m, acs, cs_xvalues, cs_y_values, coeffs) #Auxiliary function for the determination of xf. It gives H(xf) - Gamma(xf) ( == 0 at freeze-out)
     temp = m/x
-    f = BigConstant*eff_dof_sqrt(temp)*sigma_v_interpolation(acs, x, cs_xvalues, cs_y_values)*Yeq(g_quark, h_eff_dof(temp), x) - x
+    f = BigConstant*eff_dof_sqrt(temp)*sigma_v_cspline(x, cs_xvalues, cs_y_values, acs, coeffs)*Yeq(g_quark, h_eff_dof(temp), x) - x
 end
 
-function freeze_out_estimate(xft, m, acs, cs_xvalues, cs_yvalues) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values.
+function freeze_out_estimate(xft, m, acs, cs_xvalues, cs_yvalues, coeffs) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values. coeffs are the spline interpolation coefficients.
     xf0 = xft #first try
-    xf1 = xf0 - aux_func(xf0, m, acs, cs_xvalues, cs_yvalues)*2*0.001/(aux_func(xf0+0.001, m, acs, cs_xvalues, cs_yvalues)-aux_func(xf0-0.001, m, acs, cs_xvalues, cs_yvalues))
+    xf1 = xf0 - aux_func(xf0, m, acs, cs_xvalues, cs_yvalues, coeffs)*2*0.001/(aux_func(xf0+0.001, m, acs, cs_xvalues, cs_yvalues, coeffs)-aux_func(xf0-0.001, m, acs, cs_xvalues, cs_yvalues, coeffs))
     diff = abs(xf1 - xf0)
     if diff < 1E-4
         xf2 = xf1
     else
         while diff > 1E-4
-            xf2 = xf1 - aux_func(xf1, m, acs, cs_xvalues, cs_yvalues)*(xf1 - xf0)/(aux_func(xf1, m, acs, cs_xvalues, cs_yvalues) - aux_func(xf0, m, acs, cs_xvalues, cs_yvalues))
+            xf2 = xf1 - aux_func(xf1, m, acs, cs_xvalues, cs_yvalues, coeffs)*(xf1 - xf0)/(aux_func(xf1, m, acs, cs_xvalues, cs_yvalues, coeffs) - aux_func(xf0, m, acs, cs_xvalues, cs_yvalues, coeffs))
             diff = abs(xf2 - xf1)
             xf0 = copy(xf1)
             xf1 = copy(xf2)
@@ -92,10 +92,121 @@ function bc_constant(m)
     c = sqrt(pi/45)*Mpl*m
 end
 
+function sigma_v_interpolation(cs, x_input, y_input) # Interpolation of sigma_v with a cubic spline. x(y)_input are the vectors containing input data of the xs. cs is a constant part of the xs. The output is a 3*n array of (beta; gamma; delta) coefficients for the spline.
+    n = length(x_input) #read in data in logarithmic scaling for improved accuracy
+    xvals = log.(x_input)
+    yvals = log.(y_input)
+
+    beta = zeros(n) # initialise output vectors
+    gamma = zeros(n)
+    delta = zeros(n)
+
+    A = zeros(n) # Initialise auxiliary vectors for the spline
+
+    h = prepend!(diff(xvals), xvals[1] - xvals[n]) #Set matrix entries for the spline matrix problem
+    hfirst = h[1] #auxiliary variable
+    y_diff_vec = prepend!(diff(yvals), yvals[1] - yvals[n]) #Auxiliary expr appearing in the definition of the inhomogeneity d_i
+    lambda = ones(n) 
+    d = zeros(n)
+    mu = zeros(n)
+
+    for i = 1:n-1
+        lambda[i] = 1/(1 + h[i]/h[i+1])
+        mu[i] = 1 - lambda[i] 
+        d[i] = 6/(h[i] + h[i+1])*(y_diff_vec[i+1]/h[i+1] - y_diff_vec[i]/h[i])
+    end
+    lambda[n] = 1/(1 + h[n]/hfirst)
+    mu[n] = 1 - lambda[n]
+    d[n] = 6/(hfirst + h[n])*(y_diff_vec[1]/hfirst - y_diff_vec[n]/h[n])
+
+    ### Solution via Gauss elimination
+    M = Gauss_elim_spline(n, mu, lambda, d)
+    ###
+    M_diff_vec = append!(diff(M), M[1] - M[n])
+
+    for i = 1:n-1 #Now calculate the coefficients beta_i, gamma_i and delta_i from the solution of the matrix problem
+        hind = h[i+1]
+        A[i] = y_diff_vec[i+1]/hind - hind/6*M_diff_vec[i]
+        beta[i] = A[i] - M[i]*hind/2
+        delta[i] = M_diff_vec[i]/(6*hind)
+    end
+    A[n] = y_diff_vec[1]/hfirst - hfirst/6*M_diff_vec[n] #Declare the boundary terms
+    beta[n] = A[n] - M[n]*hfirst/2
+    gamma = 0.5.*M 
+    delta[n] = M_diff_vec[n]/(6*hfirst)
+
+    coeffs = zeros(3*n) #Initialising the final result vector
+    for i = 1:n
+        coeffs[i] = beta[i]
+        coeffs[i + n] = gamma[i]
+        coeffs[i + 2*n] = delta[i]
+    end
+    return coeffs
+end
+
+function Gauss_elim_spline(n, mu, lambda, d) #Calculates the solution vector M used in the function sigma_v_interpolation via Gaussian elimination of a tridiagonal matrix. n is the dimension of the matrix, mu and lambda are arrays of numbers appearing in the matrix (calculated in the mother function). d is the array of the inhomogeneity. 
+    #Initialisation of quantities
+    M = zeros(n)
+    M0 = zeros(n)
+    alpha = 1
+    q = zeros(n)
+    beta = zeros(n-1)
+    rho = zeros(n-1)
+    rho_q = zeros(n-1)
+
+    #Calculation of auxiliary vectors beta, rho and rho_q
+    beta[1] = 2 - 0.5*lambda[1]*mu[2]
+    rho[1] = d[2] - 0.5*d[1]*mu[2]
+    rho[1] = -0.5*alpha*mu[2] #rho_q_2 = u(2) - u(1)*mu(2)/2
+    for i = 2:n-1
+        beta[i] = 2 - lambda[i]*mu[i+1]/beta[i-1]
+        rho[i] = d[i] - rho[i-1]*mu[i+1]/beta[i] 
+        rho_q[i] = -rho_q[i-1]*mu[i+1]/beta[i]
+    end
+    rho_q[n-1] += lambda[n]
+
+    #Calculation of M0 and q 
+    M0[n] = rho[n-1]/beta[n-1]
+    q[n] = rho_q[n-1]/beta[n-1]
+    for i in reverse(3:n)
+        M0[i-1] = (rho[i-2] - lambda[i-1]*M0[i])/beta[i-2]
+        q[i-1] = (rho_q[i-2] - lambda[i-1]*q[i])/beta[i-2]
+    end
+    M0[1] = (d[1] - lambda[1]*M0[2])/beta[1]
+    q[1] = (alpha - lambda[1]*q[2])/beta[1]
+
+    #Final step
+    vdotM0 = M0[1] + M0[n]*mu[1]/alpha
+    vdotq = q[1] + mu[1]*q[n]/alpha
+    convenient_constant = vdotM0/(1 + vdotq)
+    for i = 1:n
+        M[i] = M0[i] - q[i]*convenient_constant
+    end
+    return M
+end
+
+function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpolation step with the previously calculated coefficient vectors beta, gamma and delta encoded in coeffs. x is the argument, x(y)_input is the input x(y)-data and cxs is the constant part of the cross section
+    n = length(x_input)
+    xvals = log.(x_input) #logarithmic interpolation
+    yvals = log.(y_input)
+    if x > last(x_input)
+        ind = n
+    else
+        ind = findfirst(x_input -> x_input > x, x_input) #find relevant interval
+    end
+
+    beta = coeffs[ind] #coefficients beta_i, gamma_i and delta_i
+    gamma = coeffs[ind + n]
+    delta = coeffs[ind + 2*n]
+
+    arg = log(x) - xvals[ind] # x-x_i
+    p = cxs*exp(yvals[ind] + arg*(beta + arg*(gamma + arg*delta))) #Cubic spline step
+end
+
 #Define parameters of implicit Euler backward solution method
 Delta_t = 1E-4
 x_initial = 1E-1
-x_final = 1E5
+x_final = 1E4
 t_initial = log(x_initial)
 t_final = log(x_final)
 
@@ -132,83 +243,11 @@ for i = 1:Npoints
     EquilibriumYield[i] = Yeq(g_quark, h_eff_dof(m_quark/xvec[i]), xvec[i])
 end
 
-function sigma_v_interpolation(cs, x_input, y_input) # Interpolation of sigma_v with a cubic spline. x(y)_input are the vectors containing input data of the xs. cs is a constant part of the xs. The output is a 3*n array of (beta; gamma; delta) coefficients for the spline.
-    n = length(x_input) #read in data in logarithmic scaling for improved accuracy
-    xvals = log.(x_input)
-    yvals = log.(y_input)
-
-    beta = zeros(n) # initialise output vectors
-    gamma = zeros(n)
-    delta = zeros(n)
-
-    A = zeros(n) # Initialise auxiliary vectors for the spline
-    M = zeros(n)
-
-    h = prepend!(diff(xvals), xvals[1] - xvals[n]) #Set matrix entries for the spline matrix problem
-    hfirst = h[1] #auxiliary variable
-    y_diff_vec = prepend!(diff(yvals), yvals[1] - yvals[n]) #Auxiliary expr appearing in the definition of teh inhomogeneity d_i
-    lambda = ones(n) 
-    d = zeros(n)
-    mu = zeros(n)
-
-    for i = 1:n-1
-        lambda[i] = 1/(1 + h[i]/h[i+1])
-        mu[i] = 1 - lambda[i] 
-        d[i] = 6/(h[i] + h[i+1])*((yvals[i+1] - yvals[i])/h[i+1] - y_diff_vec[i]/h[i])
-    end
-    lambda[n] = 1/(1 + h[n]/h[1])
-    mu[n] = 1 - lambda[n]
-    d[n] = 6/(h[1] + h[n])*((yvals[1] - yvals[n])/h[1] - y_diff_vec[n]/h[n])
-
-    ### Solution via Gauss elimination
-    
-    ###
-    
-    M_diff_vec = append!(diff(M), M[1] - M[n])
-
-    for i = 1:n-1 #Now calculate the coefficients beta_i, gamma_i and delta_i from the solution of the matrix problem
-        hind = h[i+1]
-        A[i] = y_diff_vec[i+1]/hind - hind/6*M_diff_vec[i]
-        beta[i] = A[i] - M[i]*hind*hind/6
-        delta[i] = M_diff_vec[i]/(6*hind)
-    end
-    A[n] = y_diff_vec[1]/hfirst - hfirst/6*M_diff_vec[n] #Declare the boundary terms
-    beta[n] = yvals[n] - M[n]*hfirst*hfirst/6
-    gamma = 0.5.*M 
-    delta[n] = M_diff_vec[n]/(6*hfirst)
-
-    coeffs = zeros(3*n) #Initialising the final result vector
-    for i = 1:n
-        coeffs[i] = beta[i]
-        coeffs[i + n] = gamma[i]
-        coeffs[i + 2*n] = delta[i]
-    end
-
-    return coeffs
-end
-
-function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpolation step with the previously calculated coefficient vectors beta, gamma and delta encoded in coeffs. x is the argument, x(y)_input is the input x(y)-data and cxs is the constant part of the cross section
-    n = length(x_input)
-    xvals = log.(x_input) #logarithmic interpolation
-    yvals = log.(y_input)
-    if x > last(x_input)
-        ind = n
-    else
-        ind = findfirst(x_input -> x_input > x, x_input) #find relevant interval
-    end
-
-    beta = coeffs[ind] #coefficients beta_i, gamma_i and delta_i
-    gamma = coeffs[ind + n]
-    delta = coeffs[ind + 2*n]
-
-    arg = log(x) - xvals[ind] # x-x_i
-    p = cxs*exp(yvals[ind] + arg*(beta + arg*(gamma + arg*delta))) #Cubic spline step
-end
-
 #Here the thermally averaged cross section is read in. 
 sigma_v_file = DataFrame(CSV.File("Sigma_eff.txt"))
 sigma_v_x_values = sigma_v_file[!,1]
-sigma_v_y_values = sigma_v_file[!,2]
+#sigma_v_y_values = sigma_v_file[!,2]
+sigma_v_y_values = ones(500) #for evaluation w.o. SE and BSF
 
 sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion xs
 sigma_v_averaged_coeffs = sigma_v_interpolation(sigma0, sigma_v_x_values, sigma_v_y_values) #Cubic spline fit coefficient vector (beta, gamma, delta)
@@ -217,19 +256,15 @@ for i in 1:Npoints
     sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
 end
 
-plot([xvec, sigma_v_x_values], [sigma_v_averaged, sigma0.*sigma_v_y_values], xaxis=:log, yaxis=:log)
-savefig("sigma_v_data.png")
-
-#=
 #Estimate the freeze-out xf:
-xf = freeze_out_estimate(25, m_quark, sigma0, sigma_v_x_values, sigma_v_y_values)
+xf = freeze_out_estimate(25, m_quark, sigma0, sigma_v_x_values, sigma_v_y_values, sigma_v_averaged_coeffs)
 Y_infty = Yeq(g_quark, h_eff_dof(m_quark/xf), xf)
 #Y_infty2 = 3.79*xf/(eff_dof_sqrt(m_quark/xf)*Mpl*m_quark*sigma0) # This is eq. (5.45) in Kolb and Turner. Coincides with Y_infty. 
 freeze_out_index = findfirst(xvec -> xvec > xf, xvec)
 Y_infty_vec = zeros(Npoints)
 #Y_infty2_vec = zeros(Npoints)
 for i = freeze_out_index:Npoints
-    Y_infty_vec[i] = Y_infty
+    Y_infty_vec[i] = 1/(1/Y_infty + sigma_v_cspline(xf, sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)/xf)
     #Y_infty2_vec[i] = Y_infty2
 end
 
@@ -253,12 +288,10 @@ xtics = 10.0.^collect(range(log10(x_initial), log10(x_final), step=1))
 plot(sigma_v_x_values, sigma_v_y_values, xaxis=:log, yaxis=:log)
 savefig("sigma_v_data.png")
 
-plot(xvec, [EquilibriumYield, Yx, Y_infty_vec], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)" L"Y_\infty = Y_{eq}(x_f)"], yticks = ytics, xticks = xtics, minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final), ylims = (1E-16, 1E-1))
+plot(xvec, [EquilibriumYield, Yx, Y_infty_vec], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)" L"Y_\infty"], yticks = ytics, xticks = xtics, minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final), ylims = (1E-20, 1E-1))
 plot!([xf], seriestype = :vline, label = L"x_f")
 savefig("FreezeOut.png")
 
 plot(xvec, Yx, title="Relic Yield", minorticks = 10, minorgrid = true, xlabel=L"x = m/T", ylabel=L"Y(x)", label = L"Y(x)", yticks = ytics, xaxis=:log, yaxis=:log, xticks = xtics, xlims = (x_initial, x_final), ylims = (1E-16, 1E-1))
 plot!([xf], seriestype = :vline, label = L"x_f")
 savefig("Y_plot.png")
-
-=#
