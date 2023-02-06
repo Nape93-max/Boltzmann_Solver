@@ -203,18 +203,20 @@ function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpo
     p = cxs*exp(yvals[ind] + arg*(beta + arg*(gamma + arg*delta))) #Cubic spline step
 end
 
-#Define parameters of implicit Euler backward solution method
-Delta_t = 1E-4
-x_initial = 1E-1
-x_final = 1E4
-t_initial = log(x_initial)
-t_final = log(x_final)
+function Landau_pole(m, alpha) #This calculates the Landau pole for SU(3)dark with no light flavours. 
+    Lambda = m*exp(-2*pi/(11*alpha))
+end
+
+function entropy_density(T) #Returns the entropy density of a given species
+    s = 2*pi*pi/45*h_eff_dof(T)*T^3
+end
 
 #Define physics parameters of the model
 g_quark = 4
 m_quark = 1E4
 Alpha_DM = 0.1
 sigma0 = pert_acs(Alpha_DM, m_quark)
+Lambda_dQCD = Landau_pole(m_quark, Alpha_DM)
 
 #Define constant physics parameters
 const Mpl = 1.221E19
@@ -223,6 +225,18 @@ const T0 = 2.35E-13
 const rho_crit = 3.724E-47
 const s0 = 2.225E-38
 BigConstant = bc_constant(m_quark)
+
+#Constants of FOPT (w/o factors of 1/Lambda for numerical convenience, must be included in the squeezeout step!)
+R0 = 1E-6*(Lambda_dQCD/Mpl)^(-0.9)
+R1 = (Mpl/(1E4*Lambda_dQCD))
+R_bubble = max(R0, R1)
+
+#Define parameters of implicit Euler backward solution method
+Delta_t = 1E-4
+x_initial = 1E-1
+x_final = m_quark/Lambda_dQCD
+t_initial = log(x_initial)
+t_final = log(x_final)
 
 #First define initial conditions:
 tvec = collect(t_initial:Delta_t:t_final)
@@ -256,6 +270,7 @@ for i in 1:Npoints
     sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
 end
 
+#=
 #Estimate the freeze-out xf:
 xf = freeze_out_estimate(25, m_quark, sigma0, sigma_v_x_values, sigma_v_y_values, sigma_v_averaged_coeffs)
 Y_infty = Yeq(g_quark, h_eff_dof(m_quark/xf), xf)
@@ -267,29 +282,46 @@ for i = freeze_out_index:Npoints
     Y_infty_vec[i] = 1/(1/Y_infty + sigma_v_cspline(xf, sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)/xf)
     #Y_infty2_vec[i] = Y_infty2
 end
+=#
 
 Wx = zeros(Npoints)
 Yx = zeros(Npoints)
 Yx[1] = EquilibriumYield[1]
 Wx[1] = log(Yx[1])
 
-#Solution to the Boltzmann equation
+#Solution to the Boltzmann equation for the first freeze-out
 for i = 2:Npoints
     W_old = Wx[i-1]
-    Wx[i] = Newton_Raphson_step(tvec[i], W_old, BigConstant*Delta_t*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
+    Wx[i] = Newton_Raphson_step(tvec[i], W_old, 2*BigConstant*Delta_t*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
 end
 Yx = exp.(Wx)
 
+### FOPT: Squeezeout step ###
+Yx_squeezeout_vec = 4.5/pi*sqrt(5*Yx[Npoints]/(2*pi*h_eff_dof(Lambda_dQCD)*R_bubble^3))*ones(Npoints) 
+
+dil_fac = (1 + 1.65*1*cbrt(1^4/1^2))^(0.75)
+x_dilution = m_quark/Lambda_dQCD*100
+### Entropy dilution due to glueball decay ###
+Yx_dilution_vec = dil_fac.*Yx_squeezeout_vec
+
+### Calculation of the relic abundance ###
+xtoday = m_quark/T0
+Omega_relic = Yx[Npoints]*s0*m_quark/rho_crit
+
 ### Here the plotting business starts 
 
-ytics = 10.0.^collect(range(-20, -1, step=1))
+ytics = 10.0.^collect(range(-30, -1, step=1))
 xtics = 10.0.^collect(range(log10(x_initial), log10(x_final), step=1))
 
+#=
 plot(sigma_v_x_values, sigma_v_y_values, xaxis=:log, yaxis=:log)
 savefig("sigma_v_data.png")
+=#
 
-plot(xvec, [EquilibriumYield, Yx, Y_infty_vec], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)" L"Y_\infty"], yticks = ytics, xticks = xtics, minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final), ylims = (1E-20, 1E-1))
+plot(xvec, [EquilibriumYield, Yx, Yx_squeezeout_vec, Yx_dilution_vec], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)" L"Y_S" L"Y_\infty"], yticks = ytics, xticks = xtics, minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final*1000), ylims = (1E-30, 1E-1))
 plot!([xf], seriestype = :vline, label = L"x_f")
+plot!([m_quark/Lambda_dQCD], seriestype = :vline, label = L"x_\Lambda")
+plot!([x_dilution], seriestype = :vline, label = L"x_{GB}")
 savefig("FreezeOut.png")
 
 plot(xvec, Yx, title="Relic Yield", minorticks = 10, minorgrid = true, xlabel=L"x = m/T", ylabel=L"Y(x)", label = L"Y(x)", yticks = ytics, xaxis=:log, yaxis=:log, xticks = xtics, xlims = (x_initial, x_final), ylims = (1E-16, 1E-1))
