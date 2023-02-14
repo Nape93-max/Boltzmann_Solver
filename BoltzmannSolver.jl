@@ -2,6 +2,7 @@ using Plots
 using LaTeXStrings
 using SpecialFunctions
 using CSV, DataFrames
+using QuadGK
 
 function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the next W=log(Y) point in the implicit backward Euler method.
     # t = log(x) is the t_(n+1) time step, W_old is W_n and cs is Delta_t*lambda(t_(n+1))*geff(t_(n+1)). g_deg is the degeneracy of the annihilating particles.
@@ -61,6 +62,21 @@ function h_eff_dof(T)
     end
 end
 
+function g_eff_dof(T)
+    if T <= first(temperatures)
+        h = first(geff)
+    elseif T >= last(temperatures)
+        h = last(geff)
+    else
+        ind = findfirst(temperatures -> temperatures > T, temperatures);
+        To = temperatures[ind-1]
+        Tn = temperatures[ind]
+        ho = geff[ind-1]
+        hn = geff[ind]
+        h = ho + (hn - ho)*(T-To)/(Tn-To) # simple linear interpolation
+    end
+end
+
 function aux_func(x, m, acs, cs_xvalues, cs_y_values, coeffs) #Auxiliary function for the determination of xf. It gives H(xf) - Gamma(xf) ( == 0 at freeze-out)
     temp = m/x
     f = BigConstant*eff_dof_sqrt(temp)*sigma_v_cspline(x, cs_xvalues, cs_y_values, acs, coeffs)*Yeq(g_quark, h_eff_dof(temp), x) - x
@@ -75,6 +91,29 @@ function freeze_out_estimate(xft, m, acs, cs_xvalues, cs_yvalues, coeffs) #Numer
     else
         while diff > 1E-4
             xf2 = xf1 - aux_func(xf1, m, acs, cs_xvalues, cs_yvalues, coeffs)*(xf1 - xf0)/(aux_func(xf1, m, acs, cs_xvalues, cs_yvalues, coeffs) - aux_func(xf0, m, acs, cs_xvalues, cs_yvalues, coeffs))
+            diff = abs(xf2 - xf1)
+            xf0 = copy(xf1)
+            xf1 = copy(xf2)
+        end
+    end
+    return xf2
+end
+
+function aux_func_GB_decay(xfo, m_GB, mdm, R)
+    sigma32 = (4*pi)^3/3^6/m_GB
+    lhs = log(xfo)*(5/2)+2*xfo-log(h_eff_dof(m_GB/xfo)*R/(180*pi)*(Mpl*sigma32/sqrt(4/5*pi^3*g_eff_dof(m_GB/xfo)))^(3/2))
+    return lhs
+end
+
+function GB_freeze_out_estimate(xft, m_GB, mdm, R) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values. coeffs are the spline interpolation coefficients.
+    xf0 = xft #first try
+    xf1 = xf0 - aux_func_GB_decay(xf0, m_GB, mdm, R)*2*0.001/(aux_func_GB_decay(xf0 + 0.001, m_GB, mdm, R)-aux_func_GB_decay(xf0 - 0.001, m_GB, mdm, R))
+    diff = abs(xf1 - xf0)
+    if diff < 1E-4
+        xf2 = xf1
+    else
+        while diff > 1E-4
+            xf2 = xf1 - aux_func_GB_decay(xf1, m_GB, mdm, R)*(xf1 - xf0)/(aux_func_GB_decay(xf1, m_GB, mdm, R) - aux_func_GB_decay(xf0, m_GB, mdm, R))
             diff = abs(xf2 - xf1)
             xf0 = copy(xf1)
             xf1 = copy(xf2)
@@ -203,20 +242,32 @@ function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpo
     p = cxs*exp(yvals[ind] + arg*(beta + arg*(gamma + arg*delta))) #Cubic spline step
 end
 
-function Landau_pole(m, alpha) #This calculates the Landau pole for SU(3)dark with no light flavours. 
-    Lambda = m*exp(-2*pi/(11*alpha))
+function Landau_pole(mu, alpha, beta0) #This calculates the Landau pole for a theory with coefficient beta0 given a coupling alpha(mu) at another scale mu. 
+    Lambda = mu*exp(-2*pi/(beta0*alpha))
+end
+
+function running_coupling_from_pole(Q, Lambda, beta0) #Running coupling at the scale Q given a Landau pole Lambda with a theory with a beta0 coefficient
+    return 2*pi/(beta0*log(Q/Lambda))
+end
+
+function running_coupling_from_scale(Q, mu, alphamu, beta0) #Running coupling at the scale Q given the running alphamu at another scale mu with a beta0 coefficient. 
+    return 1/(1/alphamu + beta0*log(Q/mu)/(2*pi))
 end
 
 function entropy_density(T) #Returns the entropy density of a given species
     s = 2*pi*pi/45*h_eff_dof(T)*T^3
 end
 
-#Define physics parameters of the model
-g_quark = 4
-m_quark = 1E4
-Alpha_DM = 0.1
-sigma0 = pert_acs(Alpha_DM, m_quark)
-Lambda_dQCD = Landau_pole(m_quark, Alpha_DM)
+function T_convert_u(u, ui, Ti) #Converts the variable u used in the g-average into temperatures
+    T = Ti*(ui/u)^(2/3)
+end
+
+function g_average(ui, Ti, uf) #Calculates the averaged eff dofs of entropy needed in the entropy dilution
+    integral_denom, err_denom = quadgk(u->u^(2/3)*exp(-u), ui, uf, rtol=1e-8)
+    integral_num, err_num = quadgk(u->u^(2/3)*exp(-u)*h_eff_dof(T_convert_u(u, ui, Ti))^(1/3), ui, uf, rtol=1e-8)
+    return integral_num/integral_denom
+end
+
 
 #Define constant physics parameters
 const Mpl = 1.221E19
@@ -224,24 +275,7 @@ const H0 = 1.447E-42
 const T0 = 2.35E-13
 const rho_crit = 3.724E-47
 const s0 = 2.225E-38
-BigConstant = bc_constant(m_quark)
-
-#Constants of FOPT (w/o factors of 1/Lambda for numerical convenience, must be included in the squeezeout step!)
-R0 = 1E-6*(Lambda_dQCD/Mpl)^(-0.9)
-R1 = (Mpl/(1E4*Lambda_dQCD))
-R_bubble = max(R0, R1)
-
-#Define parameters of implicit Euler backward solution method
-Delta_t = 1E-4
-x_initial = 1E-1
-x_final = m_quark/Lambda_dQCD
-t_initial = log(x_initial)
-t_final = log(x_final)
-
-#First define initial conditions:
-tvec = collect(t_initial:Delta_t:t_final)
-xvec = exp.(tvec)
-Npoints = length(tvec)
+const reduced_Hubble_squared = 0.67
 
 #Read and define degrees of freedom 
 dof_file = DataFrame(CSV.File("DegreesOfFreedom.txt"))
@@ -250,25 +284,72 @@ const geff = dof_file[!,2]
 const heff = dof_file[!,3]
 const g_star_eff_sqrt = dof_file[!,4]
 const num_of_g_points = length(temperatures)
-g_star_eff_vec = eff_dof_sqrt.(m_quark./xvec)
 
-EquilibriumYield = zeros(Npoints)
-for i = 1:Npoints
-    EquilibriumYield[i] = Yeq(g_quark, h_eff_dof(m_quark/xvec[i]), xvec[i])
-end
+#Running of SU(2)L gauge coupling
+const MZ = 91.1876 # Z boson mass in GeV
+const alpha_W_MZ = 0.03275 # The weak gauge coupling at the Z pole
 
-#Here the thermally averaged cross section is read in. 
-sigma_v_file = DataFrame(CSV.File("Sigma_eff.txt"))
-sigma_v_x_values = sigma_v_file[!,1]
-#sigma_v_y_values = sigma_v_file[!,2]
-sigma_v_y_values = ones(500) #for evaluation w.o. SE and BSF
+#Constant parameters for entropy dilution
+const R_max = 2.5E-4 #highest possible entropy ratio after the PT
+const BBN_lifetime = 1/1.52*1E-22 #Lower bound on glueball decay rate.
 
-sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion xs
-sigma_v_averaged_coeffs = sigma_v_interpolation(sigma0, sigma_v_x_values, sigma_v_y_values) #Cubic spline fit coefficient vector (beta, gamma, delta)
+array_scales = 10.0.^collect(range(0, 7,step=1))
+array_masses = 10.0.^collect(range(2, 4, step=1))
 
-for i in 1:Npoints
-    sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
-end
+g_quark = 4 #degeneracy of the Dirac quark
+
+for i = 1:length(array_scales)
+    for j = 1:length(array_masses)
+        Lambda_dQCD = array_scales[i]
+        m_quark = array_masses[j]*Lambda_dQCD
+        Alpha_DM = running_coupling_from_pole(m_quark, Lambda_dQCD, 11)
+
+    #Define physics parameters of the model - LATER: Loop over masses and couplings
+    #m_quark = 1E8 #mass of the dark quark (DM candidate)
+    #Alpha_DM = 0.1 #dark gauge coupling at the mass scale m_quark
+
+    BigConstant = bc_constant(m_quark)
+    coupling_ratio = running_coupling_from_scale(m_quark, MZ, alpha_W_MZ, 19/6)/Alpha_DM #beta0 = 19/6 for the weak interaction below m_quark
+    sigma0 = (7/162 + coupling_ratio*(8/27 + 11/24*coupling_ratio))*pert_acs(Alpha_DM, m_quark)
+    #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
+    x_PT = m_quark/Lambda_dQCD #Temperature of the phase transition
+
+    #Constants of FOPT (w/o factors of 1/Lambda for numerical convenience, cancel in the squeezeout step!)
+    R0 = 1E-6*(Lambda_dQCD/Mpl)^(-0.9)
+    R1 = (Mpl/(1E4*Lambda_dQCD))^(2/3)
+    R_pocket = max(R0, R1)
+
+    #Define parameters of implicit Euler backward solution method
+    Delta_t = 1E-4
+    x_initial = 1E-1
+    x_final = x_PT
+    t_initial = log(x_initial)
+    t_final = log(x_final)
+
+    #First define initial conditions:
+    tvec = collect(t_initial:Delta_t:t_final)
+    xvec = exp.(tvec)
+    Npoints = length(tvec)
+
+    g_star_eff_vec = eff_dof_sqrt.(m_quark./xvec) #Effective degrees of freedom
+
+    EquilibriumYield = zeros(Npoints)
+    for i = 1:Npoints
+        EquilibriumYield[i] = Yeq(g_quark, h_eff_dof(m_quark/xvec[i]), xvec[i])
+    end
+
+    #Here the thermally averaged cross section is read in. 
+    sigma_v_file = DataFrame(CSV.File("Sigma_eff.txt"))
+    sigma_v_x_values = sigma_v_file[!,1]
+    #sigma_v_y_values = sigma_v_file[!,2]
+    sigma_v_y_values = ones(500) #for evaluation w.o. SE and BSF
+
+    sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion xs
+    sigma_v_averaged_coeffs = sigma_v_interpolation(sigma0, sigma_v_x_values, sigma_v_y_values) #Cubic spline fit coefficient vector (beta, gamma, delta)
+
+    for i in 1:Npoints
+        sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
+    end
 
 #=
 #Estimate the freeze-out xf:
@@ -284,46 +365,72 @@ for i = freeze_out_index:Npoints
 end
 =#
 
-Wx = zeros(Npoints)
-Yx = zeros(Npoints)
-Yx[1] = EquilibriumYield[1]
-Wx[1] = log(Yx[1])
+    Wx = zeros(Npoints)
+    Yx = zeros(Npoints)
+    Yx[1] = EquilibriumYield[1]
+    Wx[1] = log(Yx[1])
 
-#Solution to the Boltzmann equation for the first freeze-out
-for i = 2:Npoints
-    W_old = Wx[i-1]
-    Wx[i] = Newton_Raphson_step(tvec[i], W_old, 2*BigConstant*Delta_t*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
+    #Solution to the Boltzmann equation for the first freeze-out
+    for i = 2:Npoints
+        W_old = Wx[i-1]
+        Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*Delta_t*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
+    end
+    Yx = exp.(Wx)
+
+    ### FOPT: Squeezeout step ###
+    Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Lambda_dQCD)*R_pocket^3))
+
+    ### Entropy dilution due to glueball decay ###
+    m_glueball = 7*Lambda_dQCD #Mass of the lightest 0++ glueball
+
+    x_freeze_out = GB_freeze_out_estimate(10*Lambda_dQCD/m_quark, m_glueball, m_quark, R_max) #freeze-out of dark gluons
+    Y_GB = R_max/x_freeze_out #Relic yield of dark gluons
+    T_MR = 4/3*m_glueball*Y_GB # Matter-radiation equality temperature, after which GB dominate the energy content
+    x_MR = m_quark/T_MR
+    Alpha_DM_GB_decay = running_coupling_from_scale(m_glueball, m_quark, Alpha_DM, 11) #Dark gauge coupling at the mass scale of the GBs
+    Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, MZ, alpha_W_MZ, 19/6) #Weak gauge coupling at the mass scale of the GBs
+    decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich
+    Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(2*pi*m_quark^8)*(1/15)^2*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. The factor 4 comes from the fact that the quarks are adjoint and not fundamental
+
+    dil_fac = (1 + 1.65*g_average(1e-5, T_MR, 10)*cbrt(T_MR^4/(Gamma_GB*Mpl))^2)^(-0.75)
+    x_dilution = x_PT*100
+    Yx_dilution = dil_fac*Yx_squeezeout
+
+    ### Calculation of the relic abundance ###
+    x_today = m_quark/T0
+    Omega_relic = Yx_dilution*s0*m_quark/rho_crit
+
+    println(Lambda_dQCD,'\t', m_quark,'\t', Alpha_DM, '\t', x_PT,'\t', Omega_relic,'\t', Yx_squeezeout/Yx[Npoints],'\t', dil_fac,'\t', Gamma_GB)
+    decay_const_GB = 0
+    Gamma_GB = 0
+    dil_fac = 0
+    x_dilution = 0
+    Yx_dilution = 0
+    x_today = 0
+    Omega_relic = 0
+    end
 end
-Yx = exp.(Wx)
 
-### FOPT: Squeezeout step ###
-Yx_squeezeout_vec = 4.5/pi*sqrt(5*Yx[Npoints]/(2*pi*h_eff_dof(Lambda_dQCD)*R_bubble^3))*ones(Npoints) 
-
-dil_fac = (1 + 1.65*1*cbrt(1^4/1^2))^(0.75)
-x_dilution = m_quark/Lambda_dQCD*100
-### Entropy dilution due to glueball decay ###
-Yx_dilution_vec = dil_fac.*Yx_squeezeout_vec
-
-### Calculation of the relic abundance ###
-xtoday = m_quark/T0
-Omega_relic = Yx[Npoints]*s0*m_quark/rho_crit
-
-### Here the plotting business starts 
+### Here the plotting business starts ###
 
 ytics = 10.0.^collect(range(-30, -1, step=1))
-xtics = 10.0.^collect(range(log10(x_initial), log10(x_final), step=1))
+xtics = 10.0.^collect(range(log10(x_initial), log10(x_today), step=1))
 
-#=
-plot(sigma_v_x_values, sigma_v_y_values, xaxis=:log, yaxis=:log)
-savefig("sigma_v_data.png")
-=#
+x_vec_squeezeout = range(x_PT, length=100, stop=x_dilution)
+y_vec_squeezeout = Yx_squeezeout*ones(100)
+x_vec_dilution = range(x_dilution, length=100, stop=x_today)
+y_vec_dilution = Yx_dilution*ones(100)
 
-plot(xvec, [EquilibriumYield, Yx, Yx_squeezeout_vec, Yx_dilution_vec], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)" L"Y_S" L"Y_\infty"], yticks = ytics, xticks = xtics, minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final*1000), ylims = (1E-30, 1E-1))
-plot!([xf], seriestype = :vline, label = L"x_f")
-plot!([m_quark/Lambda_dQCD], seriestype = :vline, label = L"x_\Lambda")
+#plot(sigma_v_x_values, sigma_v_y_values, xaxis=:log, yaxis=:log)
+#savefig("sigma_v_data.png")
+
+plot(xvec, [EquilibriumYield, Yx], title="WIMP freeze-out", label=[L"Y_{eq}(x)" L"Y(x)"], yticks = ytics, xticks = xtics, minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)", xaxis=:log, yaxis=:log, xlims = (x_initial, x_final*1000), ylims = (1E-30, 1E-1))
+plot!(x_vec_squeezeout, y_vec_squeezeout, label = L"Y_S")
+plot!(x_vec_dilution, y_vec_dilution, label = L"Y_\infty")
+plot!([x_MR], seriestype = :vline, label = L"x_{MR}")
+plot!([x_PT], seriestype = :vline, label = L"x_\Lambda")
 plot!([x_dilution], seriestype = :vline, label = L"x_{GB}")
 savefig("FreezeOut.png")
 
 plot(xvec, Yx, title="Relic Yield", minorticks = 10, minorgrid = true, xlabel=L"x = m/T", ylabel=L"Y(x)", label = L"Y(x)", yticks = ytics, xaxis=:log, yaxis=:log, xticks = xtics, xlims = (x_initial, x_final), ylims = (1E-16, 1E-1))
-plot!([xf], seriestype = :vline, label = L"x_f")
 savefig("Y_plot.png")
