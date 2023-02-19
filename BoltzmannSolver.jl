@@ -105,7 +105,7 @@ function aux_func_GB_decay(xfo, m_GB, mdm, R)
     return lhs
 end
 
-function GB_freeze_out_estimate(xft, m_GB, mdm, R) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values. coeffs are the spline interpolation coefficients.
+function GB_freeze_out_estimate(xft, m_GB, mdm, R) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and R is the entropy ratio. acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values. coeffs are the spline interpolation coefficients.
     xf0 = xft #first try
     xf1 = xf0 - aux_func_GB_decay(xf0, m_GB, mdm, R)*2*0.001/(aux_func_GB_decay(xf0 + 0.001, m_GB, mdm, R)-aux_func_GB_decay(xf0 - 0.001, m_GB, mdm, R))
     diff = abs(xf1 - xf0)
@@ -287,24 +287,28 @@ const num_of_g_points = length(temperatures)
 
 #Running of SU(2)L gauge coupling
 const MZ = 91.1876 # Z boson mass in GeV
-const alpha_W_MZ = 0.03275 # The weak gauge coupling at the Z pole
+const alpha_W_MZ = 0.0342556 # The weak gauge coupling at the Z pole (from arxiv: 1307.3536)
 
 #Constant parameters for entropy dilution
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 1/1.52*1E-22 #Lower bound on glueball decay rate.
 
-array_scales = 10.0.^collect(range(0, 7,step=1))
-array_masses = 10.0.^collect(range(2, 4, step=1))
+array_scales = 10.0.^collect(range(0, 6, length = 100))
+array_masses = 10.0.^collect(range(2, 4, length = 100))
 
 g_quark = 4 #degeneracy of the Dirac quark
 
-for i = 1:length(array_scales)
-    for j = 1:length(array_masses)
-        Lambda_dQCD = array_scales[i]
-        m_quark = array_masses[j]*Lambda_dQCD
-        Alpha_DM = running_coupling_from_pole(m_quark, Lambda_dQCD, 11)
+#Initialise final output file with data
+results_file = open("V_model_scan.csv", "w")
+IOStream("V_model_scan.csv")
+write(results_file, "m/GeV, Lambda/GeV, m/Lambda, Alpha(m), RPocket/Lambda, Yfo, Ysqo, xGBfo, TMReq/GeV, Gamma_GB/GeV, dilution_factor, Omegah2\n")
 
-    #Define physics parameters of the model - LATER: Loop over masses and couplings
+Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 1:length(array_masses)))
+    Lambda_dQCD = array_scales[i]
+    m_quark = array_masses[j]*Lambda_dQCD
+    Alpha_DM = running_coupling_from_pole(m_quark, Lambda_dQCD, 11)
+
+    #Define physics parameters of the model (parameters in the loop)
     #m_quark = 1E8 #mass of the dark quark (DM candidate)
     #Alpha_DM = 0.1 #dark gauge coupling at the mass scale m_quark
 
@@ -398,19 +402,14 @@ end
 
     ### Calculation of the relic abundance ###
     x_today = m_quark/T0
-    Omega_relic = Yx_dilution*s0*m_quark/rho_crit
+    Omega_relic = reduced_Hubble_squared*Yx_dilution*s0*m_quark/rho_crit
 
-    println(Lambda_dQCD,'\t', m_quark,'\t', Alpha_DM, '\t', x_PT,'\t', Omega_relic,'\t', Yx_squeezeout/Yx[Npoints],'\t', dil_fac,'\t', Gamma_GB)
-    decay_const_GB = 0
-    Gamma_GB = 0
-    dil_fac = 0
-    x_dilution = 0
-    Yx_dilution = 0
-    x_today = 0
-    Omega_relic = 0
-    end
+    write(results_file, join((m_quark, Lambda_dQCD, x_PT, Alpha_DM, R_pocket, Yx[Npoints], Yx_squeezeout, x_freeze_out, T_MR, Gamma_GB, dil_fac, Omega_relic),","),"\n")
 end
 
+close(results_file)
+
+#=
 ### Here the plotting business starts ###
 
 ytics = 10.0.^collect(range(-30, -1, step=1))
@@ -434,3 +433,4 @@ savefig("FreezeOut.png")
 
 plot(xvec, Yx, title="Relic Yield", minorticks = 10, minorgrid = true, xlabel=L"x = m/T", ylabel=L"Y(x)", label = L"Y(x)", yticks = ytics, xaxis=:log, yaxis=:log, xticks = xtics, xlims = (x_initial, x_final), ylims = (1E-16, 1E-1))
 savefig("Y_plot.png")
+=#
