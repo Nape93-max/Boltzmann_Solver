@@ -275,7 +275,7 @@ const H0 = 1.447E-42
 const T0 = 2.35E-13
 const rho_crit = 3.724E-47
 const s0 = 2.225E-38
-const reduced_Hubble_squared = 0.67
+const reduced_Hubble_squared = 0.67*0.67
 
 #Read and define degrees of freedom 
 dof_file = DataFrame(CSV.File("DegreesOfFreedom.txt"))
@@ -296,7 +296,7 @@ const BBN_lifetime = 1/1.52*1E-22 #Lower bound on glueball decay rate.
 array_scales = 10.0.^collect(range(0, 6, length = 100))
 array_masses = 10.0.^collect(range(2, 4, length = 100))
 
-g_quark = 4 #degeneracy of the Dirac quark
+const g_quark = 2*3*3 #degeneracy of the Dirac quark: Spin x DarkColour x weak multiplicity
 
 #Initialise final output file with data
 results_file = open("V_model_scan.csv", "w")
