@@ -99,21 +99,21 @@ function freeze_out_estimate(xft, m, acs, cs_xvalues, cs_yvalues, coeffs) #Numer
     return xf2
 end
 
-function aux_func_GB_decay(xfo, m_GB, mdm, R)
-    sigma32 = (4*pi)^3/3^6/m_GB
+function aux_func_GB_decay(xfo, m_GB, R)
+    sigma32 = (4*pi)^3/Ndark^6/m_GB
     lhs = log(xfo)*(5/2)+2*xfo-log(h_eff_dof(m_GB/xfo)*R/(180*pi)*(Mpl*sigma32/sqrt(4/5*pi^3*g_eff_dof(m_GB/xfo)))^(3/2))
     return lhs
 end
 
 function GB_freeze_out_estimate(xft, m_GB, mdm, R) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and R is the entropy ratio. acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values. coeffs are the spline interpolation coefficients.
     xf0 = xft #first try
-    xf1 = xf0 - aux_func_GB_decay(xf0, m_GB, mdm, R)*2*0.001/(aux_func_GB_decay(xf0 + 0.001, m_GB, mdm, R)-aux_func_GB_decay(xf0 - 0.001, m_GB, mdm, R))
+    xf1 = xf0 - aux_func_GB_decay(xf0, m_GB, R)*2*0.001/(aux_func_GB_decay(xf0 + 0.001, m_GB, R)-aux_func_GB_decay(xf0 - 0.001, m_GB, R))
     diff = abs(xf1 - xf0)
     if diff < 1E-4
         xf2 = xf1
     else
         while diff > 1E-4
-            xf2 = xf1 - aux_func_GB_decay(xf1, m_GB, mdm, R)*(xf1 - xf0)/(aux_func_GB_decay(xf1, m_GB, mdm, R) - aux_func_GB_decay(xf0, m_GB, mdm, R))
+            xf2 = xf1 - aux_func_GB_decay(xf1, m_GB, R)*(xf1 - xf0)/(aux_func_GB_decay(xf1, m_GB, R) - aux_func_GB_decay(xf0, m_GB, R))
             diff = abs(xf2 - xf1)
             xf0 = copy(xf1)
             xf1 = copy(xf2)
@@ -251,7 +251,7 @@ function running_coupling_from_pole(Q, Lambda, beta0) #Running coupling at the s
 end
 
 function running_coupling_from_scale(Q, mu, alphamu, beta0) #Running coupling at the scale Q given the running alphamu at another scale mu with a beta0 coefficient. 
-    return 1/(1/alphamu + beta0*log(Q/mu)/(2*pi))
+    return alphamu/(1 + alphamu*beta0*log(Q/mu)/(2*pi))
 end
 
 function entropy_density(T) #Returns the entropy density of a given species
@@ -270,6 +270,7 @@ end
 
 
 #Define constant physics parameters
+const Ndark = 3. #Dark SU(N) parameter N
 const Mpl = 1.221E19
 const H0 = 1.447E-42
 const T0 = 2.35E-13
@@ -287,7 +288,9 @@ const num_of_g_points = length(temperatures)
 
 #Running of SU(2)L gauge coupling
 const MZ = 91.1876 # Z boson mass in GeV
-const alpha_W_MZ = 0.0342556 # The weak gauge coupling at the Z pole (from arxiv: 1307.3536)
+const Mtop = 173 # Top quark mass in GeV
+const alpha_W_MZ = 0.0342556 # Source?!
+const alpha_W_Mtop = 0.0334 # The weak gauge coupling at the top quark mass (All from arxiv: 1307.3536)
 
 #Constant parameters for entropy dilution
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
@@ -296,7 +299,7 @@ const BBN_lifetime = 1/1.52*1E-22 #Lower bound on glueball decay rate.
 array_scales = 10.0.^collect(range(0, 6, length = 100))
 array_masses = 10.0.^collect(range(2, 4, length = 100))
 
-const g_quark = 2*3*3 #degeneracy of the Dirac quark: Spin x DarkColour x weak multiplicity
+const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
 
 #Initialise final output file with data
 results_file = open("V_model_scan.csv", "w")
@@ -306,17 +309,18 @@ write(results_file, "m/GeV, Lambda/GeV, m/Lambda, Alpha(m), RPocket/Lambda, Yfo,
 Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 1:length(array_masses)))
     Lambda_dQCD = array_scales[i]
     m_quark = array_masses[j]*Lambda_dQCD
-    Alpha_DM = running_coupling_from_pole(m_quark, Lambda_dQCD, 11)
+    Alpha_DM = running_coupling_from_pole(2*m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active
 
     #Define physics parameters of the model (parameters in the loop)
     #m_quark = 1E8 #mass of the dark quark (DM candidate)
     #Alpha_DM = 0.1 #dark gauge coupling at the mass scale m_quark
 
     BigConstant = bc_constant(m_quark)
-    coupling_ratio = running_coupling_from_scale(m_quark, MZ, alpha_W_MZ, 19/6)/Alpha_DM #beta0 = 19/6 for the weak interaction below m_quark
-    sigma0 = (7/162 + coupling_ratio*(8/27 + 11/24*coupling_ratio))*pert_acs(Alpha_DM, m_quark)
+    coupling_ratio = running_coupling_from_scale(2*m_quark, Mtop alpha_W_Mtop, 19/6-2/3*Ndark)/Alpha_DM #beta0 = 19/6 for the weak interaction below m_quark
+    sigma0 = (7/81 + coupling_ratio*(16/27 + 11/12*coupling_ratio))*pert_acs(Alpha_DM, m_quark)
     #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
-    x_PT = m_quark/Lambda_dQCD #Temperature of the phase transition
+    Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
+    x_PT = m_quark/Tcrit 
 
     #Constants of FOPT (w/o factors of 1/Lambda for numerical convenience, cancel in the squeezeout step!)
     R0 = 1E-6*(Lambda_dQCD/Mpl)^(-0.9)
@@ -345,7 +349,7 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     #Here the thermally averaged cross section is read in. 
     sigma_v_file = DataFrame(CSV.File("Sigma_eff.txt"))
     sigma_v_x_values = sigma_v_file[!,1]
-    #sigma_v_y_values = sigma_v_file[!,2]
+    #sigma_v_y_values = sigma_v_file[!,2]  #Not yet ready
     sigma_v_y_values = ones(500) #for evaluation w.o. SE and BSF
 
     sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion xs
@@ -382,17 +386,17 @@ end
     Yx = exp.(Wx)
 
     ### FOPT: Squeezeout step ###
-    Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Lambda_dQCD)*R_pocket^3))
+    Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
 
     ### Entropy dilution due to glueball decay ###
     m_glueball = 7*Lambda_dQCD #Mass of the lightest 0++ glueball
 
-    x_freeze_out = GB_freeze_out_estimate(10*Lambda_dQCD/m_quark, m_glueball, m_quark, R_max) #freeze-out of dark gluons
+    x_freeze_out = GB_freeze_out_estimate(10*Lambda_dQCD/m_quark, m_glueball, R_max) #freeze-out of dark gluons
     Y_GB = R_max/x_freeze_out #Relic yield of dark gluons
     T_MR = 4/3*m_glueball*Y_GB # Matter-radiation equality temperature, after which GB dominate the energy content
     x_MR = m_quark/T_MR
-    Alpha_DM_GB_decay = running_coupling_from_scale(m_glueball, m_quark, Alpha_DM, 11) #Dark gauge coupling at the mass scale of the GBs
-    Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, MZ, alpha_W_MZ, 19/6) #Weak gauge coupling at the mass scale of the GBs
+    Alpha_DM_GB_decay = running_coupling_from_scale(m_glueball, m_quark, Alpha_DM, 11*Ndark/3) #Dark gauge coupling at the mass scale of the GBs
+    Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, Mtop, alpha_W_Mtop, 19/6) #Weak gauge coupling at the mass scale of the GBs
     decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich
     Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(2*pi*m_quark^8)*(1/15)^2*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. The factor 4 comes from the fact that the quarks are adjoint and not fundamental
 
