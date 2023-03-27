@@ -3,6 +3,7 @@ using LaTeXStrings
 using SpecialFunctions
 using CSV, DataFrames
 using QuadGK
+using LogarithmicNumbers
 
 function bc_constant(m)
     c = sqrt(pi/45)*Mpl*m
@@ -232,6 +233,16 @@ function GB_freeze_out_estimate(xft, m_GB, R) #Numerical estimate of the freeze-
     return xf2
 end
 
+function g_average(ui, Ti, uf) #Calculates the averaged eff dofs of entropy needed in the entropy dilution
+    integral_denom, err_denom = quadgk(u->u^(2/3)*exp(-u), ui, uf, rtol=1e-8)
+    integral_num, err_num = quadgk(u->u^(2/3)*exp(-u)*h_eff_dof(T_convert_u(u, ui, Ti))^(1/3), ui, uf, rtol=1e-8)
+    return integral_num/integral_denom
+end
+
+function T_convert_u(u, ui, Ti) #Converts the variable u used in the g-average into temperatures
+    T = Ti*(ui/u)^(2/3)
+end
+
 #Define constant physics parameters
 const Ndark = 3. #Dark SU(N) parameter N
 const NdarkAdjoint = Ndark*Ndark-1
@@ -261,68 +272,75 @@ const alpha_Y_Mtop = 0.0102 # Source: arxiv: 1307.3536
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 1/1.52*1E-22 #Lower bound on glueball decay rate.
 
-array_scales = 10.0.^collect(range(0, 7, length = 2))
-array_masses = 10.0.^collect(range(2, 4, length = 2))
-array_deltas = 10.0.^collect(range(0, 4, length = 2))
-array_Yukawas = 10.0.^collect(range(-7, -1, length = 2))
+array_scales = 10.0.^collect(range(0, 2, length = 5)) #10^(0) - 10^(7)
+array_masses = 10.0.^collect(range(2, 5, length = 2)) #10^(2) - 10^(5)
+array_deltas = 10.0.^collect(range(0, 2, length = 2)) #10^(0) - 10^(2)
+array_Yukawas = 10.0.^collect(range(-7, -1, length = 2)) #10^(-7) - 10^(-1)
 
 const g_N = 4*Ndark #degeneracy of the Dirac quark N: (Spin x Particle-Antiparticle) x DarkColour
 const g_L = 4*Ndark*2 #degeneracy of the Dirac quark L: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
 
-Lambda_dQCD = 1E4
-m_N = 100*Lambda_dQCD
-mass_delta = 10
-m_L = (mass_delta+1)*m_N 
-ydark = 0.1 #dark Yukawa coupling. No running implemented, as one loop running is proportional to y^3. 
+#Initialise final output file with data
+results_file = open("NplusL_model_scan.csv", "w")
+IOStream("NplusL_model_scan.csv")
+write(results_file, "mN/GeV, Lambda/GeV, mN/Lambda, Alpha(mN), delta, mL/GeV, ydark, RPocket/Lambda, Yfo, Ysqo, xGBfo, TMReq/GeV, Gamma_GB/GeV, dilution_factor, Omegah2\n")
 
-Alpha_NN = running_coupling_from_pole(2*m_N, Lambda_dQCD, (11*Ndark-2)/3) #Alpha_DM at the scale of NN annihilation. The N flavour is active. 
-Alpha_NL = running_coupling_from_pole(m_N + m_L, Lambda_dQCD, (11*Ndark-2*2-2)/3) #Alpha_DM at the scale of NL annihilation. Both flavours are active
-Alpha_LL = running_coupling_from_pole(2*m_L, Lambda_dQCD, (11*Ndark - 2*2-2)/3) #Alpha_DM at the scale of LL annihilation
-aw_NL = running_coupling_from_scale(m_N + m_L, Mtop, alpha_W_Mtop, (19 - 4*Ndark)/6) #beta0 = 19/6 for the weak interaction below m_L
-aw_LL = running_coupling_from_scale(2*m_L, Mtop, alpha_W_Mtop, (19 - 4*Ndark)/6) #beta0 = 19/6 for the weak interaction below m_L
-aY_NL = running_coupling_from_scale(m_N + m_L, Mtop, alpha_Y_Mtop, -(41 + Ndark*4*2)/6) #beta0 = -41/6 for the U(1) interaction below m_L
-aY_LL = running_coupling_from_scale(2*m_L, Mtop, alpha_Y_Mtop, -(41 + Ndark*4*2)/6) #beta0 = -41/6 for the U(1) interaction below m_L
-BigConstant = bc_constant(m_N)
+Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:length(array_scales), 1:length(array_masses), 1:length(array_deltas), 1:length(array_Yukawas)))
+    Lambda_dQCD = array_scales[i]
+    m_N = array_masses[j]*Lambda_dQCD
+    mass_delta = array_deltas[k]
+    m_L = (mass_delta+1)*m_N 
+    ydark = array_Yukawas[l] #dark Yukawa coupling. No running implemented, as one loop running is proportional to y^3. 
 
-aux1NL = 3*aw_NL + aY_NL # Auxiliary quantities which are defined to shorten the expressions for the cross sections a bit
-aux1LL = 3*aw_LL + aY_LL
-aux2 = 159*aw_LL*aw_LL + 12*aw_LL*aY_LL + 65*aY_LL*aY_LL
-aux3 = NdarkAdjoint*(NdarkAdjoint-1)
+    Alpha_DM = running_coupling_from_pole(m_N, Lambda_dQCD, 11*Ndark/3)
+    Alpha_NN = running_coupling_from_pole(2*m_N, Lambda_dQCD, (11*Ndark-2)/3) #Alpha_DM at the scale of NN annihilation. The N flavour is active. 
+    Alpha_NL = running_coupling_from_pole(m_N + m_L, Lambda_dQCD, (11*Ndark-2*2-2)/3) #Alpha_DM at the scale of NL annihilation. Both flavours are active
+    Alpha_LL = running_coupling_from_pole(2*m_L, Lambda_dQCD, (11*Ndark - 2*2-2)/3) #Alpha_DM at the scale of LL annihilation
+    aw_NL = running_coupling_from_scale(m_N + m_L, Mtop, alpha_W_Mtop, (19 - 4*Ndark)/6) #beta0 = 19/6 for the weak interaction below m_L
+    aw_LL = running_coupling_from_scale(2*m_L, Mtop, alpha_W_Mtop, (19 - 4*Ndark)/6) #beta0 = 19/6 for the weak interaction below m_L
+    aY_NL = running_coupling_from_scale(m_N + m_L, Mtop, alpha_Y_Mtop, -(41 + Ndark*4*2)/6) #beta0 = -41/6 for the U(1) interaction below m_L
+    aY_LL = running_coupling_from_scale(2*m_L, Mtop, alpha_Y_Mtop, -(41 + Ndark*4*2)/6) #beta0 = -41/6 for the U(1) interaction below m_L
+    BigConstant = bc_constant(m_N)
 
-sigmaNN = aux3/(8*Ndark*(NdarkAdjoint + 1))*pert_acs(Alpha_NN, m_N) #Derivation of these expression in the Mathematica notebook
-sigmaNL = (4*NdarkAdjoint*Alpha_NL*m_N*m_L + 2*NdarkAdjoint*Alpha_NL*m_L*m_L + m_N*m_N*(2*NdarkAdjoint*Alpha_NL + Ndark*aux1NL))/(32*pi)*pert_acs(ydark, Ndark*m_N*m_L)
-sigmaLL = (2*pi*m_N*m_N*m_L*m_L*(Ndark*Ndark*(pi*aux2 - ydark*ydark*aux1LL) + 8*pi*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 4*pi*aux3*Alpha_LL*Alpha_LL) + m_L^4*(-2*pi*(NdarkAdjoint + 1)*ydark*ydark*aux1LL + 4*(NdarkAdjoint + 1)*ydark^4 + pi*pi*(8*NdarkAdjoint*Ndark*Alpha_LL*aux1LL + 4*aux3*Alpha_LL*Alpha_LL + aux2*(NdarkAdjoint + 1))) + pi*pi*m_N^4*(8*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 4*aux3*Alpha_LL*Alpha_LL + (NdarkAdjoint + 1)*aux2))*pert_acs(1, 8*pi*m_L*(m_N*m_N + m_L*m_L))/(Ndark*(NdarkAdjoint + 1))
+    aux1NL = 3*aw_NL + aY_NL # Auxiliary quantities which are defined to shorten the expressions for the cross sections a bit
+    aux1LL = 3*aw_LL + aY_LL
+    aux2 = 159*aw_LL*aw_LL + 12*aw_LL*aY_LL + 65*aY_LL*aY_LL
+    aux3 = NdarkAdjoint*(NdarkAdjoint-1)
 
-Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
-x_PT = m_N/Tcrit 
+    sigmaNN = aux3/(8*Ndark*(NdarkAdjoint + 1))*pert_acs(Alpha_NN, m_N) #Derivation of these expression in the Mathematica notebook
+    sigmaNL = (4*NdarkAdjoint*Alpha_NL*m_N*m_L + 2*NdarkAdjoint*Alpha_NL*m_L*m_L + m_N*m_N*(2*NdarkAdjoint*Alpha_NL + Ndark*aux1NL))/(32*pi)*pert_acs(ydark, Ndark*m_N*m_L)
+    sigmaLL = (2*pi*m_N*m_N*m_L*m_L*(Ndark*Ndark*(pi*aux2 - ydark*ydark*aux1LL) + 8*pi*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 4*pi*aux3*Alpha_LL*Alpha_LL) + m_L^4*(-2*pi*(NdarkAdjoint + 1)*ydark*ydark*aux1LL + 4*(NdarkAdjoint + 1)*ydark^4 + pi*pi*(8*NdarkAdjoint*Ndark*Alpha_LL*aux1LL + 4*aux3*Alpha_LL*Alpha_LL + aux2*(NdarkAdjoint + 1))) + pi*pi*m_N^4*(8*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 4*aux3*Alpha_LL*Alpha_LL + (NdarkAdjoint + 1)*aux2))*pert_acs(1, 8*pi*m_L*(m_N*m_N + m_L*m_L))/(Ndark*(NdarkAdjoint + 1))
 
-#Constants of FOPT (w/o factors of 1/Lambda for numerical convenience, cancel in the squeezeout step!)
-R0 = 1E-6*(Lambda_dQCD/Mpl)^(-0.9)
-R1 = (Mpl/(1E4*Lambda_dQCD))^(2/3)
-R_pocket = max(R0, R1)
+    Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
+    x_PT = m_N/Tcrit 
 
-#Define parameters of implicit Euler backward solution method
-Delta_t = 1E-4
-x_initial = 1E-1
-x_final = x_PT
-t_initial = log(x_initial)
-t_final = log(x_final)
+    #Constants of FOPT (w/o factors of 1/Lambda for numerical convenience, cancel in the squeezeout step!)
+    R0 = 1E-6*(Lambda_dQCD/Mpl)^(-0.9)
+    R1 = (Mpl/(1E4*Lambda_dQCD))^(2/3)
+    R_pocket = max(R0, R1)
 
-#First define initial conditions:
-tvec = collect(t_initial:Delta_t:t_final)
-xvec = exp.(tvec)
-Npoints = length(tvec)
+    #Define parameters of implicit Euler backward solution method
+    Delta_t = 1E-4
+    x_initial = 1E-1
+    x_final = x_PT
+    t_initial = log(x_initial)
+    t_final = log(x_final)
 
-g_star_eff_vec = eff_dof_sqrt.(m_N./xvec) #Effective degrees of freedom
+    #First define initial conditions:
+    tvec = collect(t_initial:Delta_t:t_final)
+    xvec = exp.(tvec)
+    Npoints = length(tvec)
 
-EquilibriumYieldN = zeros(Npoints) #Define equilibrium yields
-EquilibriumYieldL = zeros(Npoints)
-EquilibriumYieldDM = zeros(Npoints)
-for i = 1:Npoints
-    EquilibriumYieldN[i] = Yeq(g_N, h_eff_dof(m_L/m_N*xvec[i]), m_L/m_N*xvec[i])
-    EquilibriumYieldL[i] = Yeq(g_L, h_eff_dof(m_L/m_N*xvec[i]), m_L/m_N*xvec[i])
-    EquilibriumYieldDM[i] = EquilibriumYieldN[i] + EquilibriumYieldL[i]
-end
+    g_star_eff_vec = eff_dof_sqrt.(m_N./xvec) #Effective degrees of freedom
+
+    EquilibriumYieldN = zeros(Npoints) #Define equilibrium yields
+    EquilibriumYieldL = zeros(Npoints)
+    EquilibriumYieldDM = zeros(Npoints)
+    for i = 1:Npoints
+        EquilibriumYieldN[i] = Yeq(g_N, h_eff_dof(m_L/m_N*xvec[i]), m_L/m_N*xvec[i])
+        EquilibriumYieldL[i] = Yeq(g_L, h_eff_dof(m_L/m_N*xvec[i]), m_L/m_N*xvec[i])
+        EquilibriumYieldDM[i] = EquilibriumYieldN[i] + EquilibriumYieldL[i]
+    end
 
 #=
 #Here the thermally averaged cross section is read in. 
@@ -335,40 +353,54 @@ sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion 
 sigma_v_averaged_coeffs = sigma_v_interpolation(sigma_eff, sigma_v_x_values, sigma_v_y_values) #Cubic spline fit coefficient vector (beta, gamma, delta)
 =#
 
-#Calculate the effective cross section according to Griest and Seckel 
-Yeq_ratios = zeros(Npoints)
-for i in 1:Npoints
-    if EquilibriumYieldN[i] > 0
-        Yeq_ratios[i] = EquilibriumYieldL[i]/EquilibriumYieldN[i]
+    #Calculate the effective cross section according to Griest and Seckel 
+    Yeq_ratios = zeros(Npoints)
+    sigma_v_averaged = zeros(Npoints)
+    for i in 1:Npoints
+        if EquilibriumYieldN[i] > 0
+            Yeq_ratios[i] = EquilibriumYieldL[i]/EquilibriumYieldN[i]
+        end
+        r_GS_N = 1/(1 + Yeq_ratios[i]) #ratios as defined in Griest and Seckel
+        r_GS_L = Yeq_ratios[i]/(1 + Yeq_ratios[i])
+        sigma_v_averaged[i] = (sigmaNN*r_GS_N*r_GS_N + 2*sigmaNL*r_GS_N*r_GS_N + sigmaLL*r_GS_N*r_GS_N) #Effective xs according to Griest and Seckel 
     end
-    r_GS_N = 1/(1 + Yeq_ratios[i]) #ratios as defined in Griest and Seckel
-    r_GS_L = Yeq_ratios[i]/(1 + Yeq_ratios[i])
-    sigma_v_averaged[i] = (sigmaNN*r_GS_N*r_GS_N + 2*sigmaNL*r_GS_N*r_GS_N + sigmaLL*r_GS_N*r_GS_N) #Effective xs according to Griest and Seckel 
+
+    Wx = zeros(Npoints)
+    Yx = zeros(Npoints)
+    Yx[1] = EquilibriumYieldDM[1]
+    Wx[1] = log(Yx[1])
+
+    #Solution to the Boltzmann equation for the first freeze-out
+    for i = 2:Npoints
+        W_old = Wx[i-1]
+        Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*Delta_t*sigma_v_averaged[i], g_N, h_eff_dof(m_N/xvec[i]))
+    end
+    Yx = exp.(Wx)
+
+    ### FOPT: Squeezeout step ###
+    Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
+
+    ### Entropy dilution due to glueball decay ###
+    m_glueball = 7*Lambda_dQCD #Mass of the lightest 0++ glueball
+
+    x_freeze_out = GB_freeze_out_estimate(10*Lambda_dQCD/m_N, m_glueball, R_max) #freeze-out of dark gluons
+    Y_GB = R_max/x_freeze_out #Relic yield of dark gluons
+    T_MR = 4/3*m_glueball*Y_GB # Matter-radiation equality temperature, after which GB dominate the energy content
+    x_MR = m_N/T_MR
+    Alpha_DM_GB_decay = running_coupling_from_pole(m_glueball, Lambda_dQCD, 11*Ndark/3) #Dark gauge coupling at the mass scale of the GBs
+    Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, Mtop, alpha_W_Mtop, 19/6) #Weak gauge coupling at the mass scale of the GBs
+    decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich
+    Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(2*pi*m_N^8)*(1/15)^2*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. The factor 4 comes from the fact that the quarks are adjoint and not fundamental
+
+    dil_fac = (1 + 1.65*g_average(1e-5, T_MR, 10)*cbrt(T_MR^4/(Gamma_GB*Mpl))^2)^(-0.75)
+    #x_dilution = x_PT*100
+    Yx_dilution = dil_fac*Yx_squeezeout
+
+    ### Calculation of the relic abundance ###
+    x_today = m_N/T0
+    Omega_relic = reduced_Hubble_squared*Yx_dilution*s0*m_N/rho_crit
+
+    write(results_file, join((m_N, Lambda_dQCD, x_PT, Alpha_DM, mass_delta, m_L, ydark, R_pocket, Yx[Npoints], Yx_squeezeout, x_freeze_out, T_MR, Gamma_GB, dil_fac, Omega_relic),","),"\n")
 end
 
-Wx = zeros(Npoints)
-Yx = zeros(Npoints)
-Yx[1] = EquilibriumYieldDM[1]
-Wx[1] = log(Yx[1])
-
-#Solution to the Boltzmann equation for the first freeze-out
-for i = 2:Npoints
-    W_old = Wx[i-1]
-    Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*Delta_t*sigma_v_averaged[i], g_N, h_eff_dof(m_N/xvec[i]))
-end
-Yx = exp.(Wx)
-
-### FOPT: Squeezeout step ###
-Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
-
-### Entropy dilution due to glueball decay ###
-m_glueball = 7*Lambda_dQCD #Mass of the lightest 0++ glueball
-
-x_freeze_out = GB_freeze_out_estimate(10*Lambda_dQCD/m_N, m_glueball, R_max) #freeze-out of dark gluons
-Y_GB = R_max/x_freeze_out #Relic yield of dark gluons
-T_MR = 4/3*m_glueball*Y_GB # Matter-radiation equality temperature, after which GB dominate the energy content
-x_MR = m_quark/T_MR
-Alpha_DM_GB_decay = running_coupling_from_pole(m_glueball, Lambda_dQCD, 11*Ndark/3) #Dark gauge coupling at the mass scale of the GBs
-Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, MZ, alpha_W_MZ, 19/6) #Weak gauge coupling at the mass scale of the GBs
-decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich
-Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(2*pi*m_quark^8)*(1/15)^2*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. The factor 4 comes from the fact that the quarks are adjoint and not fundamental
+close(results_file)
