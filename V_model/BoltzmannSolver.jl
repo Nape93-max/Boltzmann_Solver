@@ -3,6 +3,7 @@ using LaTeXStrings
 using SpecialFunctions
 using CSV, DataFrames
 using QuadGK
+using LogarithmicNumbers
 
 function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the next W=log(Y) point in the implicit backward Euler method.
     # t = log(x) is the t_(n+1) time step, W_old is W_n and cs is Delta_t*lambda(t_(n+1))*geff(t_(n+1)). g_deg is the degeneracy of the annihilating particles.
@@ -105,7 +106,7 @@ function aux_func_GB_decay(xfo, m_GB, R)
     return lhs
 end
 
-function GB_freeze_out_estimate(xft, m_GB, mdm, R) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and R is the entropy ratio. acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values. coeffs are the spline interpolation coefficients.
+function GB_freeze_out_estimate(xft, m_GB, R) #Numerical estimate of the freeze-out x with the secant method. xft is the initial guess, m is the DM mass and R is the entropy ratio. acs is the constant annihilation xs. cs_xvalues are the x_values of the fully dressed acs. cs_yvalues are the corresponding acs values. coeffs are the spline interpolation coefficients.
     xf0 = xft #first try
     xf1 = xf0 - aux_func_GB_decay(xf0, m_GB, R)*2*0.001/(aux_func_GB_decay(xf0 + 0.001, m_GB, R)-aux_func_GB_decay(xf0 - 0.001, m_GB, R))
     diff = abs(xf1 - xf0)
@@ -296,8 +297,8 @@ const alpha_W_Mtop = 0.0334 # The weak gauge coupling at the top quark mass (All
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 1/1.52*1E-22 #Lower bound on glueball decay rate.
 
-array_scales = 10.0.^collect(range(0, 6, length = 100))
-array_masses = 10.0.^collect(range(2, 4, length = 100))
+array_scales = 10.0.^collect(range(0, 6, length = 10))
+array_masses = 10.0.^collect(range(2, 4, length = 10))
 
 const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
 
@@ -316,7 +317,7 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     #Alpha_DM = 0.1 #dark gauge coupling at the mass scale m_quark
 
     BigConstant = bc_constant(m_quark)
-    coupling_ratio = running_coupling_from_scale(2*m_quark, Mtop alpha_W_Mtop, 19/6-2/3*Ndark)/Alpha_DM #beta0 = 19/6 for the weak interaction below m_quark
+    coupling_ratio = running_coupling_from_scale(2*m_quark, Mtop, alpha_W_Mtop, 19/6-2/3*Ndark)/Alpha_DM #beta0 = 19/6 for the weak interaction below m_quark
     sigma0 = (7/81 + coupling_ratio*(16/27 + 11/12*coupling_ratio))*pert_acs(Alpha_DM, m_quark)
     #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
     Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
@@ -401,7 +402,7 @@ end
     Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(2*pi*m_quark^8)*(1/15)^2*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. The factor 4 comes from the fact that the quarks are adjoint and not fundamental
 
     dil_fac = (1 + 1.65*g_average(1e-5, T_MR, 10)*cbrt(T_MR^4/(Gamma_GB*Mpl))^2)^(-0.75)
-    x_dilution = x_PT*100
+    #x_dilution = x_PT*100
     Yx_dilution = dil_fac*Yx_squeezeout
 
     ### Calculation of the relic abundance ###
