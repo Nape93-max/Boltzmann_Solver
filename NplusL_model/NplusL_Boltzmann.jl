@@ -3,7 +3,7 @@ using LaTeXStrings
 using SpecialFunctions
 using CSV, DataFrames
 using QuadGK
-using LogarithmicNumbers
+#using LogarithmicNumbers #Not really needed
 
 function bc_constant(m)
     c = sqrt(pi/45)*Mpl*m
@@ -14,7 +14,7 @@ function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the n
     # gS are the effective entropy dofs. 
     W_try_initial = W_old
     W_new = Newton_Raphson_iteration(t, W_old, cs, W_try_initial, g_deg, gS)
-    diff = abs(log(W_new/W_try_initial))
+    diff = abs(log(abs(W_new/W_try_initial))) #before, with less numerical precision: abs(log(W_new/W_try_initial))
     while diff > 1E-4 
         W_try = copy(W_new);
         W_new = Newton_Raphson_iteration(t, W_old, cs, W_try, g_deg, gS)
@@ -212,7 +212,7 @@ end
 
 function aux_func_GB_decay(xfo, m_GB, R)
     sigma32 = (4*pi)^3/Ndark^6/m_GB
-    lhs = log(xfo)*(5/2)+2*xfo-log(h_eff_dof(m_GB/xfo)*R/(180*pi)*(Mpl*sigma32/sqrt(4/5*pi^3*g_eff_dof(m_GB/xfo)))^(3/2))
+    lhs = log(xfo)*(5/2) + 2*xfo - log(h_eff_dof(m_GB/xfo)*R/(180*pi)*(Mpl*sigma32/sqrt(4/5*pi^3*g_eff_dof(m_GB/xfo)))^(3/2))
     return lhs
 end
 
@@ -270,10 +270,10 @@ const alpha_Y_Mtop = 0.0102 # Source: arxiv: 1307.3536
 
 #Constant parameters for entropy dilution
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
-const BBN_lifetime = 1/1.52*1E-22 #Lower bound on glueball decay rate.
+const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
-array_scales = 10.0.^collect(range(0, 2, length = 5)) #10^(0) - 10^(7)
-array_masses = 10.0.^collect(range(2, 5, length = 2)) #10^(2) - 10^(5)
+array_scales = 10.0.^collect(range(0, 7, length = 5)) #10^(0) - 10^(7)
+array_masses = 10.0.^collect(range(2, 4, length = 2)) #10^(2) - 10^(5)
 array_deltas = 10.0.^collect(range(0, 2, length = 2)) #10^(0) - 10^(2)
 array_Yukawas = 10.0.^collect(range(-7, -1, length = 2)) #10^(-7) - 10^(-1)
 
@@ -383,14 +383,15 @@ sigma_v_averaged_coeffs = sigma_v_interpolation(sigma_eff, sigma_v_x_values, sig
     ### Entropy dilution due to glueball decay ###
     m_glueball = 7*Lambda_dQCD #Mass of the lightest 0++ glueball
 
-    x_freeze_out = GB_freeze_out_estimate(10*Lambda_dQCD/m_N, m_glueball, R_max) #freeze-out of dark gluons
+    x_freeze_out = GB_freeze_out_estimate(1, m_glueball, R_max) #freeze-out of dark gluons
     Y_GB = R_max/x_freeze_out #Relic yield of dark gluons
     T_MR = 4/3*m_glueball*Y_GB # Matter-radiation equality temperature, after which GB dominate the energy content
     x_MR = m_N/T_MR
     Alpha_DM_GB_decay = running_coupling_from_pole(m_glueball, Lambda_dQCD, 11*Ndark/3) #Dark gauge coupling at the mass scale of the GBs
     Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, Mtop, alpha_W_Mtop, 19/6) #Weak gauge coupling at the mass scale of the GBs
-    decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich
-    Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(2*pi*m_N^8)*(1/15)^2*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. The factor 4 comes from the fact that the quarks are adjoint and not fundamental
+    Alpha_Y_GB_decay = running_coupling_from_scale(m_glueball, Mtop, alpha_Y_Mtop, -41/6) #Hypercharge gauge coupling at the mass scale of the GBs
+    decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich. 
+    Gamma_GB = Alpha_DM_GB_decay*Alpha_DM_GB_decay/(8*pi*m_L^8)*1/3600*m_glueball^3*(decay_const_GB)^2*(Alpha_Y_GB_decay*Alpha_Y_GB_decay/4 + 3*Alpha_weak_GB_decay*Alpha_weak_GB_decay) #Glueball decay rate after Juknevich.
 
     dil_fac = (1 + 1.65*g_average(1e-5, T_MR, 10)*cbrt(T_MR^4/(Gamma_GB*Mpl))^2)^(-0.75)
     #x_dilution = x_PT*100
