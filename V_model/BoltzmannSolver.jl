@@ -11,10 +11,13 @@ function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the n
     W_try_initial = W_old
     W_new = Newton_Raphson_iteration(t, W_old, cs, W_try_initial, g_deg, gS)
     diff = abs(log(W_new/W_try_initial))
-    while diff > 1E-4 
+    while diff > 1E-3
         W_try = copy(W_new);
         W_new = Newton_Raphson_iteration(t, W_old, cs, W_try, g_deg, gS)
         diff = abs(log(abs(W_new/W_try)))
+    end
+    if isnan(W_new)
+        println("ALARM: W_new in function Newton_Raphson is NaN. Maybe relax bound on diff in the while loop as a fix.")
     end
     return W_new
 end
@@ -269,9 +272,42 @@ function g_average(ui, Ti, uf) #Calculates the averaged eff dofs of entropy need
     return integral_num/integral_denom
 end
 
+function rolled_index(big_ind, num_array) #This function converts a rolled index ind into the subindices small_inds = (n1, n2, ...). The maximally allowed values for the ni are stored in num_array
+    # The formula that holds is 
+    # ind = n1 + (n2-1)*L1 + (n3-1)*L1*L2 + ... + (nd-1)*L1*L2*...*L_(d-1)
+    # Via basic arithmetics, this relation can be inverted for the ni. 
+    d = length(num_array)
+    small_inds = ones(d)
+    
+    new_array = deepcopy(num_array)
+    new_ind = deepcopy(big_ind)
+    
+    h1 = prod(new_array) #It works, believe me.
+    for j in d:-1:1 
+        if new_ind == h1 || new_ind == 0
+            for k in 1:j
+                small_inds[k] = num_array[k]
+            end
+            break
+        elseif j == 1
+            small_inds[j] = new_ind
+        else
+            pop!(new_array)
+            h1 = prod(new_array)
+            h2 = ceil(new_ind/h1) 
+            if new_ind > h1
+               small_inds[j] = h2
+               new_ind -= h1*(h2-1)
+            end
+        end
+    end
+    return Int.(small_inds)
+end
+
 
 #Define constant physics parameters
 const Ndark = 3. #Dark SU(N) parameter N
+const NdarkAdjoint = Ndark*Ndark-1
 const Mpl = 1.221E19
 const H0 = 1.447E-42
 const T0 = 2.35E-13
@@ -297,10 +333,11 @@ const alpha_W_Mtop = 0.0334 # The weak gauge coupling at the top quark mass (All
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
-array_scales = 10.0.^collect(range(0, 7, length = 10))
-array_masses = 10.0.^collect(range(2, 4, length = 10))
+array_scales = 10.0.^collect(range(0, 7, length = 10)) #0 - 7 
+array_masses = 10.0.^collect(range(2, 4, length = 10)) # 2 - 4
 
 const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
+#g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
 
 #Initialise final output file with data
 results_file = open("V_model_scan.csv", "w")
@@ -318,7 +355,7 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
 
     BigConstant = bc_constant(m_quark)
     coupling_ratio = running_coupling_from_scale(2*m_quark, Mtop, alpha_W_Mtop, 19/6-2/3*Ndark)/Alpha_DM #beta0 = 19/6 for the weak interaction below m_quark
-    sigma0 = (7/81 + coupling_ratio*(16/27 + 11/12*coupling_ratio))*pert_acs(Alpha_DM, m_quark)
+    sigma0 = (NdarkAdjoint*(NdarkAdjoint-1)/(24*Ndark*Ndark) + coupling_ratio*(2*NdarkAdjoint/(3*Ndark) + 121/24*coupling_ratio))*pert_acs(Alpha_DM, m_quark)/Ndark
     #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
     Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
     x_PT = m_quark/Tcrit 
@@ -399,10 +436,9 @@ end
     Alpha_DM_GB_decay = running_coupling_from_scale(m_glueball, m_quark, Alpha_DM, 11*Ndark/3) #Dark gauge coupling at the mass scale of the GBs
     Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, Mtop, alpha_W_Mtop, 19/6) #Weak gauge coupling at the mass scale of the GBs
     decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich. 
-    Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(pi*m_quark^8)*1/600*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. 
+    Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(pi*m_quark^8)*1/1200*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. 
 
     dil_fac = (1 + 1.65*g_average(1e-5, T_MR, 10)*cbrt(T_MR^4/(Gamma_GB*Mpl))^2)^(-0.75)
-    #x_dilution = x_PT*100
     Yx_dilution = dil_fac*Yx_squeezeout
 
     ### Calculation of the relic abundance ###

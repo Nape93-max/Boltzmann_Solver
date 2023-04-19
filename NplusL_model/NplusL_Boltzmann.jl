@@ -15,10 +15,13 @@ function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the n
     W_try_initial = W_old
     W_new = Newton_Raphson_iteration(t, W_old, cs, W_try_initial, g_deg, gS)
     diff = abs(log(abs(W_new/W_try_initial))) #before, with less numerical precision: abs(log(W_new/W_try_initial))
-    while diff > 1E-4 
+    while diff > 1E-2
         W_try = copy(W_new);
         W_new = Newton_Raphson_iteration(t, W_old, cs, W_try, g_deg, gS)
         diff = abs(log(abs(W_new/W_try)))
+    end
+    if isnan(W_new)
+        println("ALARM: W_new in function Newton_Raphson is NaN. Maybe relax bound on diff in the while loop as a fix.")
     end
     return W_new
 end
@@ -243,6 +246,38 @@ function T_convert_u(u, ui, Ti) #Converts the variable u used in the g-average i
     T = Ti*(ui/u)^(2/3)
 end
 
+function rolled_index(big_ind, num_array) #This function converts a rolled index ind into the subindices small_inds = (n1, n2, ...). The maximally allowed values for the ni are stored in num_array
+    # The formula that holds is 
+    # ind = n1 + (n2-1)*L1 + (n3-1)*L1*L2 + ... + (nd-1)*L1*L2*...*L_(d-1)
+    # Via basic arithmetics, this relation can be inverted for the ni. 
+    d = length(num_array)
+    small_inds = ones(d)
+    
+    new_array = deepcopy(num_array)
+    new_ind = deepcopy(big_ind)
+    
+    h1 = prod(new_array) #It works, believe me.
+    for j in d:-1:1 
+        if new_ind == h1 || new_ind == 0
+            for k in 1:j
+                small_inds[k] = num_array[k]
+            end
+            break
+        elseif j == 1
+            small_inds[j] = new_ind
+        else
+            pop!(new_array)
+            h1 = prod(new_array)
+            h2 = ceil(new_ind/h1) 
+            if new_ind > h1
+               small_inds[j] = h2
+               new_ind -= h1*(h2-1)
+            end
+        end
+    end
+    return Int.(small_inds)
+end
+
 #Define constant physics parameters
 const Ndark = 3. #Dark SU(N) parameter N
 const NdarkAdjoint = Ndark*Ndark-1
@@ -272,10 +307,15 @@ const alpha_Y_Mtop = 0.0102 # Source: arxiv: 1307.3536
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
-array_scales = 10.0.^collect(range(0, 7, length = 5)) #10^(0) - 10^(7)
-array_masses = 10.0.^collect(range(2, 4, length = 2)) #10^(2) - 10^(5)
-array_deltas = 10.0.^collect(range(0, 2, length = 2)) #10^(0) - 10^(2)
-array_Yukawas = 10.0.^collect(range(-7, -1, length = 2)) #10^(-7) - 10^(-1)
+num_scales = 2
+num_masses = 2
+num_deltas = 2
+num_Yukawas = 2
+num_of_parameter_points = num_scales*num_masses*num_deltas*num_Yukawas
+array_scales = 10.0.^collect(range(0, 7, num_scales)) #10.0.^collect(range(0, 7, length = num_scales)) 
+array_masses = 10.0.^collect(range(2, 4, num_masses)) 
+array_deltas = 10.0.^collect(range(0, 2, num_deltas)) 
+array_Yukawas = 10.0.^collect(range(-7, -1, num_Yukawas)) 
 
 const g_N = 4*Ndark #degeneracy of the Dirac quark N: (Spin x Particle-Antiparticle) x DarkColour
 const g_L = 4*Ndark*2 #degeneracy of the Dirac quark L: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
@@ -285,12 +325,20 @@ results_file = open("NplusL_model_scan.csv", "w")
 IOStream("NplusL_model_scan.csv")
 write(results_file, "mN/GeV, Lambda/GeV, mN/Lambda, Alpha(mN), delta, mL/GeV, ydark, RPocket/Lambda, Yfo, Ysqo, xGBfo, TMReq/GeV, Gamma_GB/GeV, dilution_factor, Omegah2\n")
 
-Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:length(array_scales), 1:length(array_masses), 1:length(array_deltas), 1:length(array_Yukawas)))
+Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:num_scales, 1:num_masses, 1:num_deltas, 1:num_Yukawas)) 
+#=   
+Threads.@threads for super_index in 1:num_of_parameter_points  
+    inds = rolled_index(super_index, [num_scales, num_masses, num_deltas, num_Yukawas])
+    i = inds[1]
+    j = inds[2]
+    k = inds[3]
+    l = inds[4]
+    =#
     Lambda_dQCD = array_scales[i]
     m_N = array_masses[j]*Lambda_dQCD
     mass_delta = array_deltas[k]
     m_L = (mass_delta+1)*m_N 
-    ydark = array_Yukawas[l] #dark Yukawa coupling. No running implemented, as one loop running is proportional to y^3. 
+    ydark = array_Yukawas[l] #dark Yukawa coupling. No running implemented. 
 
     Alpha_DM = running_coupling_from_pole(m_N, Lambda_dQCD, 11*Ndark/3)
     Alpha_NN = running_coupling_from_pole(2*m_N, Lambda_dQCD, (11*Ndark-2)/3) #Alpha_DM at the scale of NN annihilation. The N flavour is active. 
@@ -304,12 +352,12 @@ Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:length(array_scale
 
     aux1NL = 3*aw_NL + aY_NL # Auxiliary quantities which are defined to shorten the expressions for the cross sections a bit
     aux1LL = 3*aw_LL + aY_LL
-    aux2 = 159*aw_LL*aw_LL + 12*aw_LL*aY_LL + 65*aY_LL*aY_LL
+    aux2 = 101*aw_LL*aw_LL + 8*aw_LL*aY_LL + 43*aY_LL*aY_LL
     aux3 = NdarkAdjoint*(NdarkAdjoint-1)
 
     sigmaNN = aux3/(8*Ndark*(NdarkAdjoint + 1))*pert_acs(Alpha_NN, m_N) #Derivation of these expression in the Mathematica notebook
     sigmaNL = (4*NdarkAdjoint*Alpha_NL*m_N*m_L + 2*NdarkAdjoint*Alpha_NL*m_L*m_L + m_N*m_N*(2*NdarkAdjoint*Alpha_NL + Ndark*aux1NL))/(32*pi)*pert_acs(ydark, Ndark*m_N*m_L)
-    sigmaLL = (2*pi*m_N*m_N*m_L*m_L*(Ndark*Ndark*(pi*aux2 - ydark*ydark*aux1LL) + 8*pi*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 4*pi*aux3*Alpha_LL*Alpha_LL) + m_L^4*(-2*pi*(NdarkAdjoint + 1)*ydark*ydark*aux1LL + 4*(NdarkAdjoint + 1)*ydark^4 + pi*pi*(8*NdarkAdjoint*Ndark*Alpha_LL*aux1LL + 4*aux3*Alpha_LL*Alpha_LL + aux2*(NdarkAdjoint + 1))) + pi*pi*m_N^4*(8*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 4*aux3*Alpha_LL*Alpha_LL + (NdarkAdjoint + 1)*aux2))*pert_acs(1, 8*pi*m_L*(m_N*m_N + m_L*m_L))/(Ndark*(NdarkAdjoint + 1))
+    sigmaLL = 0.5*(2*pi*m_N*m_N*m_L*m_L*(Ndark*Ndark*(3*pi*aux2 - ydark*ydark*aux1LL) + 16*pi*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 8*pi*aux3*Alpha_LL*Alpha_LL) + m_L^4*(-2*pi*(NdarkAdjoint + 1)*ydark*ydark*aux1LL + 4*(NdarkAdjoint + 1)*ydark^4 + pi*pi*(16*NdarkAdjoint*Ndark*Alpha_LL*aux1LL + 8*aux3*Alpha_LL*Alpha_LL + 3*aux2*(NdarkAdjoint + 1))) + pi*pi*m_N^4*(16*Ndark*NdarkAdjoint*Alpha_LL*aux1LL + 8*aux3*Alpha_LL*Alpha_LL + 3*(NdarkAdjoint + 1)*aux2))*pert_acs(1, 8*pi*m_L*(m_N*m_N + m_L*m_L))/(Ndark*(NdarkAdjoint + 1))
 
     Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
     x_PT = m_N/Tcrit 
@@ -391,7 +439,9 @@ sigma_v_averaged_coeffs = sigma_v_interpolation(sigma_eff, sigma_v_x_values, sig
     Alpha_weak_GB_decay = running_coupling_from_scale(m_glueball, Mtop, alpha_W_Mtop, 19/6) #Weak gauge coupling at the mass scale of the GBs
     Alpha_Y_GB_decay = running_coupling_from_scale(m_glueball, Mtop, alpha_Y_Mtop, -41/6) #Hypercharge gauge coupling at the mass scale of the GBs
     decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich. 
-    Gamma_GB = Alpha_DM_GB_decay*Alpha_DM_GB_decay/(8*pi*m_L^8)*1/3600*m_glueball^3*(decay_const_GB)^2*(Alpha_Y_GB_decay*Alpha_Y_GB_decay/4 + 3*Alpha_weak_GB_decay*Alpha_weak_GB_decay) #Glueball decay rate after Juknevich.
+    Gamma_GB_dim8 = Alpha_DM_GB_decay*Alpha_DM_GB_decay/(8*pi*m_L^8)*1/3600*m_glueball^3*(decay_const_GB)^2*(Alpha_Y_GB_decay*Alpha_Y_GB_decay/4 + 1.5*Alpha_weak_GB_decay*Alpha_weak_GB_decay) #dim 8 Glueball decay rate after Juknevich.
+    Gamma_GB_dim6 = (ydark*ydark*Alpha_DM_GB_decay*decay_const_GB/(m_L*m_N))^2/(72*pi^3*m_glueball)  #dim 6 Glueball decay rate after Juknevich.
+    Gamma_GB = Gamma_GB_dim6 + Gamma_GB_dim8
 
     dil_fac = (1 + 1.65*g_average(1e-5, T_MR, 10)*cbrt(T_MR^4/(Gamma_GB*Mpl))^2)^(-0.75)
     #x_dilution = x_PT*100

@@ -15,13 +15,17 @@ function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the n
         W_new = Newton_Raphson_iteration(t, W_old, cs, W_try, g_deg, gS)
         diff = abs(log(abs(W_new/W_try)))
     end
+    if isnan(W_new)
+        println("ALARM: W_new in function Newton_Raphson is NaN. Maybe relax bound on diff in the while loop as a fix.")
+    end
     return W_new
 end
 
 function Newton_Raphson_iteration(t, W_old, cs, W_previous, g_deg, gS) #Does one NR-step to calculate a trial W^(i+1)_(n+1). W_previous = W^(i)_n
     A = exp(W_previous);
-    B = Yeq(g_deg, gS, exp(t))^2/A
+    B = Yeq(g_deg, gS, exp(t))^2/A 
     W_next = W_previous - (W_old - W_previous + cs*(A - B))/(1 + cs*(A + B))
+    return W_next
 end
 
 function Yeq(g_deg, gS, x) #Calculates the equilibrium yield of species with degeneracy g_deg at time x with gS relativistic entropic d.o.f.
@@ -284,10 +288,11 @@ const heff = dof_file[!,3]
 const g_star_eff_sqrt = dof_file[!,4]
 const num_of_g_points = length(temperatures)
 
-g_quark = 4 #degeneracy of the Dirac quark
+const g_quark = 4 #degeneracy of the Dirac quark
+#g_quark = 4 #degeneracy of the Dirac quark
 
-m_quark = 1E4
-Alpha_DM = 0.1
+m_quark = 1778.27941003892
+Alpha_DM = 0.08538219774781
 
 BigConstant = bc_constant(m_quark)
 sigma0 = pert_acs(Alpha_DM, m_quark)
@@ -295,7 +300,7 @@ sigma0 = pert_acs(Alpha_DM, m_quark)
 #Define parameters of implicit Euler backward solution method
 Delta_t = 1E-4
 x_initial = 1E-1
-x_final = 1E16
+x_final = 2822.66573022051/0.63
 t_initial = log(x_initial)
 t_final = log(x_final)
 
@@ -321,9 +326,9 @@ Wx[1] = log(Yx[1])
 #Solution to the Boltzmann equation for the first freeze-out
 for i = 2:Npoints
     W_old = Wx[i-1]
-    Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*Delta_t*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
+   Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*Delta_t*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
 end
 Yx = exp.(Wx)
 
 Omega_relic = reduced_Hubble_squared*Yx[Npoints]*s0*m_quark/rho_crit
-println(Omega_relic)
+println(Omega_relic, "\t", Yx[Npoints])
