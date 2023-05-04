@@ -36,10 +36,10 @@ function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the n
     return W_new
 end
 
-function Newton_Raphson_iteration(t, W_old, cs, W_previous, g_deg, gS) #Does one NR-step to calculate a trial W^(i+1)_(n+1). W_previous = W^(i)_n
+function Newton_Raphson_iteration(t, W_old, cs, W_previous, g_deg, gS) #Does one NR-step to calculate a trial W^(i+1)_(n+1). W_previous = W^(i)_(n+1)
     A = exp(W_previous);
     B = Yeq(g_deg, gS, exp(t))^2/A 
-    W_next = W_previous - (W_old - W_previous + cs*(A - B))/(1 + cs*(A + B))
+    W_next = W_previous - (W_previous - W_old + cs*(A - B))/(1 + cs*(A + B))
     return W_next
 end
 
@@ -127,7 +127,7 @@ function bc_constant(m)
     c = sqrt(pi/45)*Mpl*m
 end
 
-function sigma_v_interpolation(cs, x_input, y_input) # Interpolation of sigma_v with a cubic spline. x(y)_input are the vectors containing input data of the xs. cs is a constant part of the xs. The output is a 3*n array of (beta; gamma; delta) coefficients for the spline.
+function sigma_v_interpolation(x_input, y_input) # Interpolation of sigma_v with a cubic spline. x(y)_input are the vectors containing input data of the xs. cs is a constant part of the xs. The output is a 3*n array of (beta; gamma; delta) coefficients for the spline.
     n = length(x_input) #read in data in logarithmic scaling for improved accuracy
     xvals = log.(x_input)
     yvals = log.(y_input)
@@ -230,6 +230,8 @@ function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpo
         ind = findfirst(x_input -> x_input > x, x_input) #find relevant interval
     end
 
+    println(ind)
+
     beta = coeffs[ind] #coefficients beta_i, gamma_i and delta_i
     gamma = coeffs[ind + n]
     delta = coeffs[ind + 2*n]
@@ -291,7 +293,7 @@ function quark_freeze_out(x_final, m, sigma, BC, g_dm)
     #Solution to the Boltzmann equation for the first freeze-out
     for i = 2:Npoints
         W_old = Wx[i-1]
-        Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BC*Delta_t*sigma_v_averaged[i], g_dm, h_eff_dof(m/xvec[i]))
+        Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BC*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], g_dm, h_eff_dof(m/xvec[i]))
     end
 
     Yx = exp.(Wx)
