@@ -230,8 +230,6 @@ function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpo
         ind = findfirst(x_input -> x_input > x, x_input) #find relevant interval
     end
 
-    println(ind)
-
     beta = coeffs[ind] #coefficients beta_i, gamma_i and delta_i
     gamma = coeffs[ind + n]
     delta = coeffs[ind + 2*n]
@@ -293,7 +291,7 @@ function quark_freeze_out(x_final, m, sigma, BC, g_dm)
     #Solution to the Boltzmann equation for the first freeze-out
     for i = 2:Npoints
         W_old = Wx[i-1]
-        Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BC*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], g_dm, h_eff_dof(m/xvec[i]))
+        Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BC*g_star_eff_vec[i]*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], g_dm, h_eff_dof(m/xvec[i]))
     end
 
     Yx = exp.(Wx)
