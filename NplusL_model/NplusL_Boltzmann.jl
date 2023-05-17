@@ -118,8 +118,8 @@ const alpha_Y_Mtop = 0.0102 # Source: arxiv: 1307.3536
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
-num_scales = 10
-num_masses = 10
+num_scales = 100
+num_masses = 100
 num_deltas = 10
 num_Yukawas = 10
 num_parameter_points = num_scales*num_masses*num_deltas*num_Yukawas

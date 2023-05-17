@@ -1,17 +1,50 @@
 include("FreezeOut.jl")
+using Plots
+using GR
+using LaTeXStrings
 
 g_quark = 4 #degeneracy of the Dirac quark
 
-m_quark = 7000
-Alpha_DM = 0.01
+Lambda = 1E7
+ratio = 10000
+m_quark = ratio*Lambda
+Alpha_DM = running_coupling_from_pole(m_quark, Lambda, 11)
+
+#= ### BLOCK FOR HEATMAP GENERATION
+len_scales = 10
+len_masses = 10
+array_scales = 10.0.^collect(range(2, 7, len_scales)) 
+array_masses = 10.0.^collect(range(2, 4, len_masses)) 
+xi_hm = ones(len_scales, len_masses)
+for i = 1:len_scales
+    for j = 1:len_masses
+        Lambda = array_masses[i]
+        m_quark = array_masses[j]*Lambda
+        Alpha_DM = running_coupling_from_pole(m_quark, Lambda, 11)
+
+        BigConstant = bc_constant(m_quark)
+        sigma0 = pert_acs(Alpha_DM, m_quark)
+
+        Y_final = quark_freeze_out(Lambda, m_quark, sigma0, BigConstant, g_quark)
+        xi_hm[i,j] = 1/cbrt(Y_final*2*pi*pi/45*h_eff_dof(Lambda)) 
+    end
+end
+heatmap(array_scales, array_masses, xi_hm, 
+c=cgrad([:blue, :white,:red, :yellow]), xlabel=L"\Lambda / GeV", ylabel=L"m_Q/\Lambda",
+title=L"Inter quark spacing \xi", xaxis=:log10, yaxis=:log10)
+=#
+
+
 
 BigConstant = bc_constant(m_quark)
 sigma0 = pert_acs(Alpha_DM, m_quark)
 
-Y_final = quark_freeze_out(200, m_quark, sigma0, BigConstant, g_quark)
+Y_final = quark_freeze_out(Lambda, m_quark, sigma0, BigConstant, g_quark)
 
 Omega_relic = reduced_Hubble_squared*Y_final*s0*m_quark/rho_crit
+inter_quark_spacing = 1/cbrt(Y_final*2*pi*pi/45*h_eff_dof(Lambda))
 println(Omega_relic, "\t", Y_final)
+
 
 
 #=

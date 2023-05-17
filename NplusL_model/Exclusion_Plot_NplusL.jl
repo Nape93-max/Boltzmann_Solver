@@ -49,9 +49,6 @@ const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
 test_df = DataFrame(CSV.File("NplusL_model_scan.csv")) #Read in data as a dataframe
 
-Yukawa_coupling = 1E-1 #For simple plots
-#Mass_delta = 12.9154966
-
 #Initialise the data in respective arrays
 y_values = test_df[!, 2] #values for Lambda
 x_values = test_df[!, 1] ./ test_df[!, 2] #values for m/Lambda
@@ -60,11 +57,24 @@ Yukawa_values = test_df[!, 7] #values for yd
 GB_rate_values = test_df[!, 13]
 relic_abundance_values = test_df[!, 15] 
 
-#BLOCK for colour maps
+#BLOCK for colour maps w/ fixed yd
+Yukawa_coupling = 1E-3
+delta1 = 1
+delta2 = 1.67
 
+x_relic1,  y_relic1 = relic_line(x_values, y_values, relic_abundance_values, delta_values, delta1, Yukawa_values, Yukawa_coupling)
+x_BBN1, y_BBN1 = BBN_line(x_values, y_values, GB_rate_values, delta_values, delta1, Yukawa_values, Yukawa_coupling) 
+x_relic2,  y_relic2 = relic_line(x_values, y_values, relic_abundance_values, delta_values, delta2, Yukawa_values, Yukawa_coupling)
+x_BBN2, y_BBN2 = BBN_line(x_values, y_values, GB_rate_values, delta_values, delta2, Yukawa_values, Yukawa_coupling) 
 
-#BLOCK for the simple plots
-#=
+plot(x_relic1, y_relic1, xlims = (1E2, 1E4), ylims = (1, 1E7), title="N + L model: yd = $Yukawa_coupling", minorticks = 10,  minorgrid = true, legend=:bottomleft, ylabel = L"\Lambda/GeV", xlabel = L"m_N/\Lambda", xscale = :log10, yscale = :log10)
+plot!(x_relic2, y_relic2)
+savefig("Plots/delta_map.png")
+
+#= #BLOCK for the simple plots
+Yukawa_coupling = 1E-1 #For simple plots
+Mass_delta = 12.9154966
+
 correct_relic_indices = excluded_relic_inds(relic_abundance_values, delta_values, Mass_delta, Yukawa_values, Yukawa_coupling) #Find indices of data which are EXCLUDED by observations
 correct_BBN_indices = excluded_BBN_inds(GB_rate_values, delta_values, Mass_delta,  Yukawa_values, Yukawa_coupling)
 
