@@ -1,14 +1,18 @@
-using Plots
+include("Triple_Solver.jl")
 
-include("../FreezeOut.jl")
+const SUNN = 3 #No of colours of the group
+const SUNN2 = 2*SUNN
 
-g_quark = 4 #degeneracy of the Dirac quark
+const g_quark = 4*SUNN #degeneracy of the Dirac quark
+const g_Diquark = SUNN2*(SUNN2-1) #Degeneracy of the Diquark (check all possible combinations of colour, spin and particle-antiparticle)
+const g_Baryon = 4*SUNN/factorial(SUNN-2) #Degeneracy of the baryon
 
-m_quark = 10000
-Alpha_DM = 0.1
+m_quark = 100000
+Lambda_dQCD = 100
+Alpha_ann = running_coupling_from_pole(2*m_quark, Lambda_dQCD, (11*SUNN-2)/3) #coupling at quark-antiquark annihilation scale
 
-BigConstant = bc_constant(m_quark)
-sigma0 = pert_acs(Alpha_DM, m_quark)
+BigConstant = bc_constant(m_quark) #This constant is a UNIVERSAL part of the prefactor of all the Boltzmann equations, because x = m_quark/T_SM. 
+sigma_ann = pert_acs(Alpha_ann, m_quark) #This misses factors of O(1) depending on N_d
 
 #Define parameters of implicit Euler backward solution method
 x_final = 1000
@@ -35,7 +39,7 @@ sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion 
 
 for i in 1:Npoints
     #sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
-    sigma_v_averaged[i] = sigma0
+    sigma_v_averaged[i] = sigma_ann
 end
 
 Wx = zeros(Npoints)
