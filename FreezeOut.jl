@@ -19,15 +19,15 @@ const num_of_g_points = length(temperatures)
 
 #BEGIN function definitions:
 
-function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the next W=log(Y) point in the implicit backward Euler method.
-    # t = log(x) is the t_(n+1) time step, W_old is W_n and cs is Delta_t*lambda(t_(n+1))*geff(t_(n+1)). g_deg is the degeneracy of the annihilating particles.
+function Newton_Raphson_step(x, W_old, cs, g_deg, gS) #Method to calculate the next W=log(Y) point in the implicit backward Euler method.
+    # x is the x_(n+1) time step, W_old is W_n and cs is Delta_t*lambda(t_(n+1))*geff(t_(n+1)). g_deg is the degeneracy of the annihilating particles.
     # gS are the effective entropy dofs. 
     W_try_initial = W_old
-    W_new = Newton_Raphson_iteration(t, W_old, cs, W_try_initial, g_deg, gS)
+    W_new = Newton_Raphson_iteration(x, W_old, cs, W_try_initial, g_deg, gS)
     diff = abs(log(abs(W_new/W_try_initial)))
     while diff > 1E-2 
-        W_try = copy(W_new);
-        W_new = Newton_Raphson_iteration(t, W_old, cs, W_try, g_deg, gS)
+        W_try = deepcopy(W_new);
+        W_new = Newton_Raphson_iteration(x, W_old, cs, W_try, g_deg, gS)
         diff = abs(log(abs(W_new/W_try)))
     end
     if isnan(W_new)
@@ -36,9 +36,9 @@ function Newton_Raphson_step(t, W_old, cs, g_deg, gS) #Method to calculate the n
     return W_new
 end
 
-function Newton_Raphson_iteration(t, W_old, cs, W_previous, g_deg, gS) #Does one NR-step to calculate a trial W^(i+1)_(n+1). W_previous = W^(i)_(n+1)
+function Newton_Raphson_iteration(x, W_old, cs, W_previous, g_deg, gS) #Does one NR-step to calculate a trial W^(i+1)_(n+1). W_previous = W^(i)_(n+1)
     A = exp(W_previous);
-    B = Yeq(g_deg, gS, exp(t))^2/A 
+    B = Yeq(g_deg, gS, x)^2/A 
     W_next = W_previous - (W_previous - W_old + cs*(A - B))/(1 + cs*(A + B))
     return W_next
 end
@@ -120,11 +120,11 @@ end
 
 function pert_acs(alpha, m)
     h = alpha/m
-    sigma = pi*h*h
+    return pi*h*h
 end
 
 function bc_constant(m)
-    c = sqrt(pi/45)*Mpl*m
+    return sqrt(pi/45)*Mpl*m
 end
 
 function sigma_v_interpolation(x_input, y_input) # Interpolation of sigma_v with a cubic spline. x(y)_input are the vectors containing input data of the xs. cs is a constant part of the xs. The output is a 3*n array of (beta; gamma; delta) coefficients for the spline.
@@ -262,11 +262,12 @@ function quark_freeze_out(x_final, m, sigma, BC, g_dm)
     xvec = exp.(tvec)
     Npoints = length(tvec)
 
-    g_star_eff_vec = eff_dof_sqrt.(m./xvec) #Effective degrees of freedom
+    g_star_eff_vec = eff_dof_sqrt.(m./xvec) #Sqrt of effective degrees of freedom
+    h_eff_dof_vec = h_eff_dof.(m./xvec) #Effective entropic dofs
 
     EquilibriumYield = zeros(Npoints)
     for i = 1:Npoints
-        EquilibriumYield[i] = Yeq(g_dm, h_eff_dof(m/xvec[i]), xvec[i])
+        EquilibriumYield[i] = Yeq(g_dm, h_eff_dof_vec[i], xvec[i])
     end
 
     #Here the thermally averaged cross section is read in. 
@@ -288,10 +289,11 @@ function quark_freeze_out(x_final, m, sigma, BC, g_dm)
     Yx[1] = EquilibriumYield[1]
     Wx[1] = log(Yx[1])
 
+    modified_BC = BC*Delta_t*0.5 #Modified BC make code more efficient    
     #Solution to the Boltzmann equation for the first freeze-out
     for i = 2:Npoints
         W_old = Wx[i-1]
-        Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BC*g_star_eff_vec[i]*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], g_dm, h_eff_dof(m/xvec[i]))
+        Wx[i] = Newton_Raphson_step(xvec[i], W_old, modified_BC*g_star_eff_vec[i]/xvec[i]*sigma_v_averaged[i], g_dm, h_eff_dof_vec[i])
     end
 
     Yx = exp.(Wx)

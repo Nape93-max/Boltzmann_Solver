@@ -5,8 +5,8 @@ using LaTeXStrings
 
 g_quark = 4 #degeneracy of the Dirac quark
 
-Lambda = 1E7
-ratio = 10000
+Lambda = 1E2
+ratio = 1000
 m_quark = ratio*Lambda
 Alpha_DM = running_coupling_from_pole(m_quark, Lambda, 11)
 

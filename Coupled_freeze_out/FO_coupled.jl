@@ -1,59 +1,46 @@
 include("Triple_Solver.jl")
 
-const SUNN = 3 #No of colours of the group
-const SUNN2 = 2*SUNN
-
-const g_quark = 4*SUNN #degeneracy of the Dirac quark
-const g_Diquark = SUNN2*(SUNN2-1) #Degeneracy of the Diquark (check all possible combinations of colour, spin and particle-antiparticle)
-const g_Baryon = 4*SUNN/factorial(SUNN-2) #Degeneracy of the baryon
-
+#Parameters
 m_quark = 100000
 Lambda_dQCD = 100
-Alpha_ann = running_coupling_from_pole(2*m_quark, Lambda_dQCD, (11*SUNN-2)/3) #coupling at quark-antiquark annihilation scale
-
-BigConstant = bc_constant(m_quark) #This constant is a UNIVERSAL part of the prefactor of all the Boltzmann equations, because x = m_quark/T_SM. 
-sigma_ann = pert_acs(Alpha_ann, m_quark) #This misses factors of O(1) depending on N_d
 
 #Define parameters of implicit Euler backward solution method
-x_final = 1000
-
-Delta_t = 1E-4
-x_initial = 1E-1
-t_initial = log(x_initial)
-t_final = log(x_final)
-
-#First define initial conditions:
-tvec = collect(t_initial:Delta_t:t_final)
+x_initial = 5
+x_final = 1E7
+Delta_t = 1E-1
+tvec = collect(log(x_initial):Delta_t:log(x_final))
 xvec = exp.(tvec)
-Npoints = length(tvec)
+Npoints = length(xvec)
 
-g_star_eff_vec = eff_dof_sqrt.(m_quark./xvec) #Effective degrees of freedom
+# Define which processes should be included in the analysis - THE ORDER CRUCIALLY MATTERS AND MUST NOT BE INTERCHANGED!
+qqTogg = true #No.1: Quark antiquark annihilation into gluons
+DDTogg = true #No.2: Diquark rearrangement annihilation into gluons 
+BBTogg = true #No.3: Baryon rearrangement annihilation into gluons 
+qqToDg = true #No.4: Quark capture into diquarks
+qDToBg = true #No.5: Diquark capture into baryons
+qBToqq = false #No.6: Rearrangement quark + baryon into 2 quarks
+qBToDg = false #No.7: Rearrangement quark + baryon into diquark + gluons
+DqToqg = false #No.8: Rearrangement diquark + quark into quark and gluons
+DBToqg = false #No.9: Rearrangement baryon + diquark into guark and gluon 
+DDToBq = false #No.10: Rearrangement 2 diquarks into baryon and quark 
+BDToDq = false #No.11: Rarrangement diquark + baryon into diquark and quark 
+BBToDD = false #No.12: Rearrangement 2 baryons -> 2 diquarks 
+DDToqq = false #No.13: Rearrangement 2 diquarks -> 2 quarks 
+BBToqq = false #No.14: Rearrangement 2 baryons -> 2 quarks 
 
-EquilibriumYield = zeros(Npoints)
-for i = 1:Npoints
-    EquilibriumYield[i] = Yeq(g_quark, h_eff_dof(m_quark/xvec[i]), xvec[i])
-end
+active_processes = [qqTogg, DDTogg, BBTogg, qqToDg, qDToBg, qBToqq, qBToDg, DqToqg, DBToqg, DDToBq, BDToDq, BBToDD, DDToqq, BBToqq]
 
-sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion xs
-#sigma_v_averaged_coeffs = sigma_v_interpolation(sigma0, sigma_v_x_values, sigma_v_y_values) #Cubic spline fit coefficient vector (beta, gamma, delta)
+YxQuark, YxDiQuark, YxBaryon = Coupled_Freeze_Out(x_initial, x_final, Delta_t, m_quark, Lambda_dQCD, active_processes)
 
+results_file = open("FO_data.csv", "w")
+IOStream("FO_data.csv")
+write(results_file, "x, Y1, Y2, Y3 \n")
 for i in 1:Npoints
-    #sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
-    sigma_v_averaged[i] = sigma_ann
+    write(results_file, join((xvec[i],YxQuark[i], YxDiQuark[i], YxBaryon[i]), ","),"\n")
 end
+close(results_file)
 
-Wx = zeros(Npoints)
-Yx = zeros(Npoints)
-Yx[1] = EquilibriumYield[1]
-Wx[1] = log(Yx[1])
-
-#Solution to the Boltzmann equation for the first freeze-out
-for i = 2:Npoints
-    W_old = Wx[i-1]
-    Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*Delta_t*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
-end
-
-Yx = exp.(Wx)
-
-plot(xvec, Yx, xscale = :log10, yscale = :log10, xlabel = "x = m/T", ylabel = "Y(x)", title = "Freezeout", minorgrid = true, minorticks = 10)
+plot(xvec, YxQuark, xscale = :log10, yscale = :log10, xlabel = "x = m/T", ylabel = "Y(x)", label=L"Y_1(x)",title = "Freezeout", minorgrid = true, minorticks = 10)
+plot!(xvec, YxDiQuark, label=L"Y_2(x)")
+plot!(xvec, YxBaryon, label=L"Y_3(x)")
 savefig("Test.png")

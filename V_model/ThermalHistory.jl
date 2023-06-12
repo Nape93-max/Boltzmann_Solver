@@ -20,6 +20,7 @@ include("../SqueezeOut.jl") #Include important functions regarding seeze-out and
 #Define constant physics parameters
 const Ndark = 3. #Dark SU(N) parameter N
 const NdarkAdjoint = Ndark*Ndark-1
+const kappa = (Ndark*Ndark-1)*(Ndark*Ndark-2)/(16*Ndark^3)
 
 #Running of SU(2)L gauge coupling
 const MZ = 91.1876 # Z boson mass in GeV
@@ -33,15 +34,18 @@ const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 const Relic_abundance_limit = 0.12 
 
 const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
+gDM = 4*3 #For testing purposes
 
 #Define physics parameters of the model (parameters in the loop)
 Lambda_dQCD = 100
-m_quark = 1E6
+m_quark = Lambda_dQCD*1E3
 Alpha_DM = running_coupling_from_pole(2*m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active
 Alpha_dark = running_coupling_from_pole(m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active #dark gauge coupling at the mass scale m_quark
+alpha = running_coupling_from_pole(2*m_quark, Lambda_dQCD, (11*Ndark-2)/3) #For testing purposes
 
 BigConstant = bc_constant(m_quark)
 sigma0 = cross_section(m_quark, Alpha_DM)
+sigma_simple = kappa*pert_acs(alpha, m_quark) #For testing purposes
 #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
 Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
 x_PT = m_quark/Tcrit 
@@ -52,7 +56,8 @@ R_pocket = pocket_radius(Lambda_dQCD)
 #Define parameters of implicit Euler backward solution method
 Delta_t = 1E-4
 x_initial = 5
-x_final = x_PT
+#x_final = x_PT
+x_final = 1000
 t_initial = log(x_initial)
 t_final = log(x_final)
 
@@ -62,10 +67,12 @@ xvec = exp.(tvec)
 Npoints = length(tvec)
 
 g_star_eff_vec = eff_dof_sqrt.(m_quark./xvec) #Effective degrees of freedom
+g_effective = 106.75 #For testing purposes
 
 EquilibriumYield = zeros(Npoints)
 for i = 1:Npoints
-    EquilibriumYield[i] = Yeq(g_quark, h_eff_dof(m_quark/xvec[i]), xvec[i])
+    #EquilibriumYield[i] = Yeq(g_quark, h_eff_dof(m_quark/xvec[i]), xvec[i])
+    EquilibriumYield[i] = Yeq(gDM, g_effective, xvec[i]) #For testing purposes
 end
 
 #Here the thermally averaged cross section is read in. 
@@ -79,7 +86,8 @@ sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion 
 
 for i in 1:Npoints
     #sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
-    sigma_v_averaged[i] = sigma0
+    #sigma_v_averaged[i] = sigma0
+    sigma_v_averaged[i] = sigma_simple #For testing purposes
 end
 
 Wx = zeros(Npoints)
@@ -90,9 +98,19 @@ Wx[1] = log(Yx[1])
 #Solution to the Boltzmann equation for the first freeze-out
 for i = 2:Npoints
     W_old = Wx[i-1]
-    Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*g_star_eff_vec[i]*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
+    #Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*g_star_eff_vec[i]*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
+    Wx[i] = Newton_Raphson_step(xvec[i], W_old, 0.5*BigConstant*g_effective*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], gDM, g_effective) #For testing purposes
 end
 Yx = exp.(Wx)
+
+results_file = open("FO_data.csv", "w")
+IOStream("FO_data.csv")
+write(results_file, "x, Y \n")
+
+for i in 1:1000:Npoints
+    write(results_file, join((xvec[i],Yx[i]), ","),"\n")
+end
+close(results_file)
 
 ### FOPT: Squeezeout step ###
 Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
@@ -116,8 +134,8 @@ Yx_dilution = dil_fac*Yx_squeezeout
 relic_abundance_Yield_limit = Relic_abundance_limit*rho_crit/(reduced_Hubble_squared*s0*m_quark)
 
 plot(xvec, EquilibriumYield, title="V model: m = $(m_quark/1000) TeV, " * L"\Lambda = " * "$Lambda_dQCD GeV",
- label=[L"Y_{eq}(x)" L"Y_{f.o.}(x)"], minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)",
-  xaxis=:log, yaxis=:log, xlims = (x_initial, x_final*1000), ylims = (1E-30, 1E-1))
+    label=[L"Y_{eq}(x)" L"Y_{f.o.}(x)"], minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)",
+    xaxis=:log, yaxis=:log, xlims = (x_initial, x_final*1000), ylims = (1E-30, 1E-1))
 plot!(xvec, Yx,  label=L"Y_{f.o.}(x)")
 plot!([x_PT; 1E6],[Yx_squeezeout; Yx_squeezeout], label = L"Y_{s.q.}")
 plot!([1E6; 1E9],[Yx_dilution; Yx_dilution], label = L"Y_{dil}")
