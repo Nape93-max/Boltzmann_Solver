@@ -38,7 +38,7 @@ gDM = 4*3 #For testing purposes
 
 #Define physics parameters of the model (parameters in the loop)
 Lambda_dQCD = 100
-m_quark = Lambda_dQCD*1E3
+m_quark = Lambda_dQCD*1E4
 Alpha_DM = running_coupling_from_pole(2*m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active
 Alpha_dark = running_coupling_from_pole(m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active #dark gauge coupling at the mass scale m_quark
 alpha = running_coupling_from_pole(2*m_quark, Lambda_dQCD, (11*Ndark-2)/3) #For testing purposes
@@ -56,8 +56,8 @@ R_pocket = pocket_radius(Lambda_dQCD)
 #Define parameters of implicit Euler backward solution method
 Delta_t = 1E-4
 x_initial = 5
-#x_final = x_PT
-x_final = 1000
+x_final = x_PT
+#x_final = 1000
 t_initial = log(x_initial)
 t_final = log(x_final)
 
@@ -135,7 +135,7 @@ relic_abundance_Yield_limit = Relic_abundance_limit*rho_crit/(reduced_Hubble_squ
 
 plot(xvec, EquilibriumYield, title="V model: m = $(m_quark/1000) TeV, " * L"\Lambda = " * "$Lambda_dQCD GeV",
     label=[L"Y_{eq}(x)" L"Y_{f.o.}(x)"], minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)",
-    xaxis=:log, yaxis=:log, xlims = (x_initial, x_final*1000), ylims = (1E-30, 1E-1))
+    xaxis=:log, yaxis=:log, xlims = (x_initial,1E9), ylims = (1E-30, 1E-1))
 plot!(xvec, Yx,  label=L"Y_{f.o.}(x)")
 plot!([x_PT; 1E6],[Yx_squeezeout; Yx_squeezeout], label = L"Y_{s.q.}")
 plot!([1E6; 1E9],[Yx_dilution; Yx_dilution], label = L"Y_{dil}")

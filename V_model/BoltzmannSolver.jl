@@ -14,6 +14,11 @@ function glueball_decay(m_glueball, m_quark, Alpha_DM)
     Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(pi*m_quark^8)*1/1200*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. 
 end
 
+function rearrangement_cross_section(mq, alpha, x, xc) #returns sigma_v_RA depending on whether x > xc (rearrangement) or x < xc (pert. cross section)
+    #mq is the dark quark mass and alpha is the coupling at the annihilation scale
+    return 1
+end
+
 include("../FreezeOut.jl") #Include important functions regarding freeze-out
 include("../SqueezeOut.jl") #Include important functions regarding seeze-out and GB decay
 
@@ -32,17 +37,18 @@ const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
 #Details on the parameter scan
-num_scales = 100
-num_masses = 100
+num_scales = 2
+num_masses = 2
 num_parameter_points = num_scales*num_masses
-array_scales = 10.0.^collect(range(0, 7, length = num_scales)) #0 - 7 
-array_masses = 10.0.^collect(range(2, 4, length = num_masses)) # 2 - 4
+array_scales = 10.0.^collect(range(-3, 7, length = num_scales)) #0 - 7 
+array_masses = 10.0.^collect(range(0, 2, length = num_masses)) # 2 - 4
 
 const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
 
 #initialise arrays of quantities that will be calculated and later written into results file
 xPT_data_vec = zeros(num_parameter_points)
 AlphaDM_data_vec = zeros(num_parameter_points)
+sigma_data_vec = zeros(num_parameter_points)
 RPocket_data_vec = zeros(num_parameter_points)
 Yfo_data_vec = zeros(num_parameter_points)
 Ysqo_data_vec = zeros(num_parameter_points)
@@ -53,7 +59,7 @@ dil_fac_data_vec = zeros(num_parameter_points)
 Omegah2_data_vec = zeros(num_parameter_points)
 
 Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 1:length(array_masses))) #Masterloop of parameter scans
-   big_ind = Int(i + (j-1)*num_scales)
+    big_ind = Int(i + (j-1)*num_scales)
 
     #Define physics parameters of the model (parameters in the loop)
     Lambda_dQCD = array_scales[i]
@@ -64,6 +70,7 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
 
     BigConstant = bc_constant(m_quark)
     sigma0 = cross_section(m_quark, Alpha_DM)
+    sigma_data_vec[big_ind] = sigma0
     #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
     Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
     x_PT = m_quark/Tcrit 
@@ -108,13 +115,13 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
 end
 
 #Initialise final output file with data
-results_file = open("V_model_scan.csv", "w")
-IOStream("V_model_scan.csv")
-write(results_file, "m/GeV, Lambda/GeV, x_PT, Alpha(m), RPocket/Lambda, Yfo, Ysqo, xGBfo, TMReq/GeV, Gamma_GB/GeV, dilution_factor, Omegah2\n")
+results_file = open("V_model_little_scan.csv", "w")
+IOStream("V_model_little_scan.csv")
+write(results_file, "m/GeV, Lambda/GeV, x_PT, Alpha(m), sigma0, RPocket/Lambda, Yfo, Ysqo, xGBfo, TMReq/GeV, Gamma_GB/GeV, dilution_factor, Omegah2\n")
 for i in 1:num_scales #Write out data
     for j in 1:num_masses
         local big_ind = Int(i + (j-1)*num_scales)
-        write(results_file, join((array_masses[j]*array_scales[i], array_scales[i], xPT_data_vec[big_ind], AlphaDM_data_vec[big_ind], RPocket_data_vec[big_ind], Yfo_data_vec[big_ind], Ysqo_data_vec[big_ind], xGBfo_data_vec[big_ind], TMReq_data_vec[big_ind], Gamma_GB_data_vec[big_ind], dil_fac_data_vec[big_ind], Omegah2_data_vec[big_ind]),","),"\n")
+        write(results_file, join((array_masses[j]*array_scales[i], array_scales[i], xPT_data_vec[big_ind], AlphaDM_data_vec[big_ind], sigma_data_vec[big_ind], RPocket_data_vec[big_ind], Yfo_data_vec[big_ind], Ysqo_data_vec[big_ind], xGBfo_data_vec[big_ind], TMReq_data_vec[big_ind], Gamma_GB_data_vec[big_ind], dil_fac_data_vec[big_ind], Omegah2_data_vec[big_ind]),","),"\n")
     end
 end
 close(results_file)
