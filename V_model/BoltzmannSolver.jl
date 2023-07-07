@@ -72,7 +72,7 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     sigma0 = cross_section(m_quark, Alpha_DM)
     sigma_data_vec[big_ind] = sigma0
     #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
-    Tcrit = 0.63*Lambda_dQCD #Temperature of the phase transition
+    Tcrit = 1.91*Lambda_dQCD #Temperature of the phase transition (parameters for SU(3) from 1605.08048)
     x_PT = m_quark/Tcrit 
     xPT_data_vec[big_ind] = x_PT
 
