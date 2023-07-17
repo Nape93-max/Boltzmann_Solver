@@ -99,7 +99,7 @@ x_mass2_line = 10.0.^collect(range(1.7, 4, length = 100))
 y_mass2_line = (1*10^3)./x_mass2_line
 
 x_mass3_line = 10.0.^collect(range(1.7, 4, length = 100))
-y_mass3_line = (1*10^6)./x_mass3_line
+y_mass3_line = (5*10^6)./x_mass3_line
 
 x_mass4_line = 10.0.^collect(range(1.7, 4, length = 100))
 y_mass4_line = (1*10^9)./x_mass4_line

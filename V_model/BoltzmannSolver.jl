@@ -41,7 +41,7 @@ num_scales = 2
 num_masses = 2
 num_parameter_points = num_scales*num_masses
 array_scales = 10.0.^collect(range(-3, 7, length = num_scales)) #0 - 7 
-array_masses = 10.0.^collect(range(0, 2, length = num_masses)) # 2 - 4
+array_masses = 10.0.^collect(range(1.2, 4, length = num_masses)) # 2 - 4
 
 const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
 
@@ -80,13 +80,26 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     R_pocket = pocket_radius(Lambda_dQCD)
     RPocket_data_vec[big_ind] = R_pocket
     
-    #Quark freeze-out
-    Yfo = quark_freeze_out(x_PT, m_quark, sigma0, BigConstant, g_quark)
-    Yfo_data_vec[big_ind] = Yfo
+    if array_masses[j] < 30
+        #=
+        #Quark freeze-out
+        Yfo = quark_freeze_out(x_PT, m_quark, sigma0, BigConstant, g_quark)
+        Yfo_data_vec[big_ind] = Yfo
 
-    ### FOPT: Squeezeout step ###
-    Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
-    Ysqo_data_vec[big_ind] = Yx_squeezeout
+        ### FOPT: Squeezeout step ###
+        Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
+        =#
+        Ysqo_data_vec[big_ind] = Yx_squeezeout
+        println("EH!")
+    else
+        #Quark freeze-out
+        Yfo = quark_freeze_out(x_PT, m_quark, sigma0, BigConstant, g_quark)
+        Yfo_data_vec[big_ind] = Yfo
+
+        ### FOPT: Squeezeout step ###
+        Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
+        Ysqo_data_vec[big_ind] = Yx_squeezeout
+    end
 
     ### Entropy dilution due to glueball decay ###
     m_glueball = 7*Lambda_dQCD #Mass of the lightest 0++ glueball

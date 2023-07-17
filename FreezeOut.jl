@@ -127,7 +127,9 @@ function bc_constant(m)
     return sqrt(pi/45)*Mpl*m
 end
 
-function sigma_v_interpolation(x_input, y_input) # Interpolation of sigma_v with a cubic spline. x(y)_input are the vectors containing input data of the xs. cs is a constant part of the xs. The output is a 3*n array of (beta; gamma; delta) coefficients for the spline.
+function sigma_v_interpolation(x_input, y_input) # Interpolation of sigma_v with a cubic spline.
+    # x(y)_input are the vectors containing input data of the xs. cs is a constant part of the xs.
+    # The output is a 3*n array of (beta; gamma; delta) coefficients for the spline.
     n = length(x_input) #read in data in logarithmic scaling for improved accuracy
     xvals = log.(x_input)
     yvals = log.(y_input)
@@ -220,11 +222,12 @@ function Gauss_elim_spline(n, mu, lambda, d) #Calculates the solution vector M u
     return M
 end
 
-function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpolation step with the previously calculated coefficient vectors beta, gamma and delta encoded in coeffs. x is the argument, x(y)_input is the input x(y)-data and cxs is the constant part of the cross section
+function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpolation step with the previously calculated coefficient vectors beta, gamma and delta
+    # encoded in coeffs. x is the argument, x(y)_input is the input x(y)-data and cxs is the constant part of the cross section
     n = length(x_input)
     xvals = log.(x_input) #logarithmic interpolation
     yvals = log.(y_input)
-    if x > last(x_input)
+    if x >= last(x_input)
         ind = n
     else
         ind = findfirst(x_input -> x_input > x, x_input) #find relevant interval
@@ -235,7 +238,7 @@ function sigma_v_cspline(x, x_input, y_input, cxs, coeffs) #Cubic spline interpo
     delta = coeffs[ind + 2*n]
 
     arg = log(x) - xvals[ind] # x-x_i
-    p = cxs*exp(yvals[ind] + arg*(beta + arg*(gamma + arg*delta))) #Cubic spline step
+    return cxs*exp(yvals[ind] + arg*(beta + arg*(gamma + arg*delta))) #Cubic spline step
 end
 
 function running_coupling_from_pole(Q, Lambda, beta0) #Running coupling at the scale Q given a Landau pole Lambda with a theory with a beta0 coefficient
