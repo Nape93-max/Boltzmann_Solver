@@ -81,16 +81,17 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     RPocket_data_vec[big_ind] = R_pocket
     
     if array_masses[j] < 30
-        #=
-        #Quark freeze-out
+        #First Quark freeze-out
         Yfo = quark_freeze_out(x_PT, m_quark, sigma0, BigConstant, g_quark)
         Yfo_data_vec[big_ind] = Yfo
 
         ### FOPT: Squeezeout step ###
         Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
-        =#
+        
         Ysqo_data_vec[big_ind] = Yx_squeezeout
-        println("EH!")
+        
+        #Second baryon freeze-out
+        ###TO BE CONTINUED
     else
         #Quark freeze-out
         Yfo = quark_freeze_out(x_PT, m_quark, sigma0, BigConstant, g_quark)
