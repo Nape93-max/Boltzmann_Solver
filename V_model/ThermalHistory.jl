@@ -1,6 +1,6 @@
 using Plots
 using LaTeXStrings
-using LogarithmicNumbers #Not really needed
+#using LogarithmicNumbers #Not really needed
 
 function cross_section(m, alpha)
     coupling_ratio = running_coupling_from_scale(2*m, Mtop, alpha_W_Mtop, 19/6-2/3*Ndark)/alpha #beta0 = 19/6 for the weak interaction below m_quark
@@ -35,10 +35,11 @@ const Relic_abundance_limit = 0.12
 
 const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
 gDM = 4*3 #For testing purposes
+const g_Baryon = 4*6*Ndark #degeneracy of the baryon. 6 = 3*2*1 SU(2)L dofs and 4*Ndark is derived in the Overleaf document
 
 #Define physics parameters of the model (parameters in the loop)
-Lambda_dQCD = 100
-m_quark = Lambda_dQCD*40
+Lambda_dQCD = 1
+m_quark = Lambda_dQCD*15
 Alpha_DM = running_coupling_from_pole(2*m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active
 Alpha_dark = running_coupling_from_pole(m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active #dark gauge coupling at the mass scale m_quark
 alpha = running_coupling_from_pole(2*m_quark, Lambda_dQCD, (11*Ndark-2)/3) #For testing purposes
@@ -55,7 +56,7 @@ R_pocket = pocket_radius(Lambda_dQCD)
 
 #Define parameters of implicit Euler backward solution method
 Delta_t = 1E-4
-x_initial = 5
+x_initial = 0.5
 x_final = x_PT
 #x_final = 1000
 t_initial = log(x_initial)
@@ -115,6 +116,7 @@ close(results_file)
 =#
 ### FOPT: Squeezeout step ###
 Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
+#Yx_squeezeout = Yx[Npoints]/10 #For testing purposes
 
 if m_quark/Lambda_dQCD < 30 #Intermediate and strong coupling regime
     ### Include a new 'freeze-out' solution stage, now for baryons
@@ -128,10 +130,9 @@ if m_quark/Lambda_dQCD < 30 #Intermediate and strong coupling regime
     xvec2 = exp.(tvec2)
     Npoints2 = length(tvec2)
 
-    EquilibriumYield2 = zeros(Npoints2)
+    EquilibriumYieldBaryon = zeros(Npoints2)
     for i = 1:Npoints2
-        #EquilibriumYield[i] = Yeq(g_quark, h_eff_dof(m_quark/xvec[i]), xvec[i])
-        EquilibriumYield2[i] = Yeq(gDM, g_effective, xvec2[i]) #For testing purposes
+        EquilibriumYieldBaryon[i] = Yeq_baryon(g_Baryon, h_eff_dof(m_quark/xvec2[i]), xvec2[i], Alpha_dark, Ndark)
     end
 
     sigma_v_averaged2 = ones(Npoints2) #Initialise array for interpolated annihaltion xs
@@ -139,8 +140,8 @@ if m_quark/Lambda_dQCD < 30 #Intermediate and strong coupling regime
 
     for i in 1:Npoints2
         #sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
-        #sigma_v_averaged[i] = sigma0
-        sigma_v_averaged2[i] = sigma_simple #For testing purposes
+        #sigma_v_averaged2[i] = sigma0 #For testing purposes
+        sigma_v_averaged2[i] = 1/Lambda_dQCD^2 #For testing purposes
     end
 
     Wx2 = zeros(Npoints2)
@@ -152,7 +153,7 @@ if m_quark/Lambda_dQCD < 30 #Intermediate and strong coupling regime
     for i = 2:Npoints2
         W_old = Wx2[i-1]
         #Wx[i] = Newton_Raphson_step(tvec[i], W_old, 0.5*BigConstant*g_star_eff_vec[i]*Delta_t*exp(-tvec[i])*sigma_v_averaged[i], g_quark, h_eff_dof(m_quark/xvec[i]))
-        Wx2[i] = Newton_Raphson_step(xvec2[i], W_old, 0.5*BigConstant*g_effective*Delta_t/xvec2[i]*sigma_v_averaged2[i], gDM, g_effective) #For testing purposes
+        Wx2[i] = Newton_Raphson_step_Baryon(xvec2[i], W_old, 0.5*BigConstant*g_effective*Delta_t/xvec2[i]*sigma_v_averaged2[i], g_Baryon, g_effective, Alpha_dark, Ndark) #For testing purposes
     end
     Yx2 = exp.(Wx2)
 end
@@ -180,14 +181,15 @@ relic_abundance_Yield_limit = Relic_abundance_limit*rho_crit/(reduced_Hubble_squ
 
 plot(xvec, EquilibriumYield, title="V model: m = $(m_quark/1000) TeV, " * L"\Lambda = " * "$Lambda_dQCD GeV",
     label=[L"Y_{eq}(x)" L"Y_{f.o.}(x)"], minorticks = 10, minorgrid = true, xlabel="x = m/T", ylabel="Y(x)",
-    xaxis=:log, yaxis=:log, xlims = (x_initial,1E4), ylims = (1E-23, 1E-1), linewidth = 3)
+    xaxis=:log, yaxis=:log, xlims = (x_initial,1E4), ylims = (1E-43, 1E-1), linewidth = 3)
 plot!(xvec, Yx,  label=L"Y_{quark}(x)", linewidth = 3)
 
 if m_quark/Lambda_dQCD < 30 #Intermediate and strong coupling regime
+    plot!(xvec2, EquilibriumYieldBaryon, label=L"Y_{eq, B}(x)")
     plot!(xvec2, Yx2,  label=L"Y_{baryon}(x)", linewidth = 3)
 else #Coulomb regime
     plot!([x_PT; 1E3],[Yx_squeezeout; Yx_squeezeout], label = L"Y_{s.q.}", linewidth = 3)
 end
 plot!([1E3; 1E4],[Yx_dilution; Yx_dilution], label = L"Y_{dil}", linewidth = 3)
 hline!([relic_abundance_Yield_limit], linestyle=:dash, label = L"\Omega h^2 = 0.12", linewidth = 3)
-savefig("ThermalHistory_conf_AFTER_fo.png")
+savefig("ThermalHistory_conf_DURING_fo.png")
