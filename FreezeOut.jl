@@ -36,11 +36,35 @@ function Newton_Raphson_step(x, W_old, cs, g_deg, gS) #Method to calculate the n
     return W_new
 end
 
-function Newton_Raphson_iteration(x, W_old, cs, W_previous, g_deg, gS) #Does one NR-step to calculate a trial W^(i+1)_(n+1). W_previous = W^(i)_(n+1)
+function Newton_Raphson_iteration(x, W_old, cs, W_previous, g_deg, gS) 
+    #Does one NR-step to calculate a trial W^(i+1)_(n+1). W_previous = W^(i)_(n+1)
     A = exp(W_previous);
     B = Yeq(g_deg, gS, x)^2/A 
     W_next = W_previous - (W_previous - W_old + cs*(A - B))/(1 + cs*(A + B))
-    return W_next
+end
+
+function Newton_Raphson_iteration_Baryon(x, W_old, cs, W_previous, g_deg, gS, alpha, Nc)
+    #Does one NR-step to calculate a trial W^(i+1)_(n+1) for baryon freezeout. W_previous = W^(i)_(n+1)
+    A = exp(W_previous);
+    B = Yeq_baryon(g_deg, gS, x, alpha, Nc)^2/A 
+    W_next = W_previous - (W_previous - W_old + cs*(A - B))/(1 + cs*(A + B))
+end
+
+function Newton_Raphson_step_Baryon(x, W_old, cs, g_deg, gS, alpha, Nc) #Method to calculate the next W=log(Y) point in the implicit backward Euler method.
+    # x is the x_(n+1) time step, W_old is W_n and cs is Delta_t*lambda(t_(n+1))*geff(t_(n+1)). g_deg is the degeneracy of the annihilating particles.
+    # gS are the effective entropy dofs. 
+    W_try_initial = W_old
+    W_new = Newton_Raphson_iteration_Baryon(x, W_old, cs, W_try_initial, g_deg, gS, alpha, Nc)
+    diff = abs(log(abs(W_new/W_try_initial)))
+    while diff > 1E-2 
+        W_try = deepcopy(W_new);
+        W_new = Newton_Raphson_iteration_Baryon(x, W_old, cs, W_try, g_deg, gS, alpha, Nc)
+        diff = abs(log(abs(W_new/W_try)))
+    end
+    if isnan(W_new)
+        println("ALARM: W_new in function Newton_Raphson is NaN. Maybe relax bound on diff in the while loop as a fix.")
+    end
+    return W_new
 end
 
 function Yeq(g_deg, gS, x) #Calculates the equilibrium yield of species with degeneracy g_deg at time x with gS relativistic entropic d.o.f.
@@ -49,6 +73,21 @@ function Yeq(g_deg, gS, x) #Calculates the equilibrium yield of species with deg
     else
         90/(2*pi)^3.5*g_deg/gS*x*sqrt(x)*exp(-x) #This is the non-relativistic version of the line above
     end
+end
+
+function Ebin_baryon_per_mass(alpha, Nc) # Gives the binding energy of a baryon of Nc quarks in units of the quark mass.
+    # This formula is taken from 2305.01685, eqn. (147) & (148)
+    # alpha is the coupling evaluated at the mass scale mQ
+    c1 = 0.013
+    c2 = 0.021
+    c3 = 0.023
+    Ebin = alpha*alpha*Nc*(-c3 + Nc*(c2 + c1*Nc))
+end
+
+function Yeq_baryon(g_deg, gS, x, alpha, Nc) # Gives the equilibrium yield of a baryon with degeneracy g_deg, made of Nc quarks
+    # alpha is evaluated at the quark mass scale (mQ), x = m_Q/T and gS are the relativistic entropic degrees of freedom
+    y = (Nc - Ebin_baryon_per_mass(alpha, Nc))*x
+    Yeq_B = 90/(2*pi)^3.5*g_deg/gS*y*sqrt(y)*exp(-y)
 end
 
 function eff_dof_sqrt(T)
@@ -256,7 +295,7 @@ end
 function quark_freeze_out(x_final, m, sigma, BC, g_dm)
     #Define parameters of implicit Euler backward solution method
     Delta_t = 1E-4
-    x_initial = 1E-1
+    x_initial = 0.5
     t_initial = log(x_initial)
     t_final = log(x_final)
 
