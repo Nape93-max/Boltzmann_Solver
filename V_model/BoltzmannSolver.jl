@@ -87,7 +87,6 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
 
         ### FOPT: Squeezeout step ###
         Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
-        
         Ysqo_data_vec[big_ind] = Yx_squeezeout
         
         #Second baryon freeze-out

@@ -118,7 +118,7 @@ close(results_file)
 Yx_squeezeout = 1.5/pi*sqrt(15*Yx[Npoints]/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
 #Yx_squeezeout = Yx[Npoints]/10 #For testing purposes
 
-if m_quark/Lambda_dQCD < 30 #Intermediate and strong coupling regime
+if m_quark/Lambda_dQCD < 10^6 #Intermediate and strong coupling regime
     ### Include a new 'freeze-out' solution stage, now for baryons
     x_initial2 = x_PT
     x_final2 = 1000
@@ -184,7 +184,7 @@ plot(xvec, EquilibriumYield, title="V model: m = $(m_quark/1000) TeV, " * L"\Lam
     xaxis=:log, yaxis=:log, xlims = (x_initial,1E4), ylims = (1E-43, 1E-1), linewidth = 3)
 plot!(xvec, Yx,  label=L"Y_{quark}(x)", linewidth = 3)
 
-if m_quark/Lambda_dQCD < 30 #Intermediate and strong coupling regime
+if m_quark/Lambda_dQCD < 10^6 #Intermediate and strong coupling regime
     plot!(xvec2, EquilibriumYieldBaryon, label=L"Y_{eq, B}(x)")
     plot!(xvec2, Yx2,  label=L"Y_{baryon}(x)", linewidth = 3)
 else #Coulomb regime
