@@ -34,7 +34,7 @@ end
 const Relic_abundance_limit = 0.12 
 const BBN_lifetime = 1.52*1E24 #Upper bound on glueball decay rate in Gev^-1.
 
-test_df = DataFrame(CSV.File("V_model_new_scan.csv")) #Read in data as a dataframe
+test_df = DataFrame(CSV.File("V_model_scan.csv")) #Read in data as a dataframe
 
 #Initialise the data in respective arrays
 y_values = test_df[!, 2] #values for Lambda
@@ -80,9 +80,9 @@ y_BBN = y_values[excluded_BBN_indices]
 #Scatter plot to get a feeling for the result
 scatter(x_relic, y_relic, title = "V model", minorgrid = true, minorticks = 10, legend=:bottomleft,
  xscale = :log10, yscale = :log10, ylabel = L"\Lambda/GeV", xlabel = L"m_Q/\Lambda", labels = L"\Omega_{DM} h^2>0.12",
- xlims = (25, 1E4), ylims = (1E-3, 1E7))
+ xlims = (2, 1E4), ylims = (1E-3, 1E7))
 scatter!(x_BBN, y_BBN, labels = L"\tau_{GB} > 1s")
-savefig("Exclusion_plot_Vmodel_scatter_relic_only.png")
+savefig("Exclusion_plot_Vmodel_scatter.png")
 #=
 x_relic_line_fo_only, y_relic_line_fo_only = line_finder(x_relic_fo_only, y_relic_fo_only, 10, 0)
 x_relic_line_fo_sq, y_relic_line_fo_sq = line_finder(x_relic_fo_sq, y_relic_fo_sq, 10, 0)
@@ -92,19 +92,19 @@ x_relic_line_fo_dil, y_relic_line_fo_dil = line_finder(x_relic_fo_dil, y_relic_f
 x_relic_line, y_relic_line = line_finder(x_relic, y_relic, 10, 0)
 x_BBN_line, y_BBN_line = line_finder(x_BBN, y_BBN, 10, 1)
 
-x_mass1_line = 10.0.^collect(range(1.7, 4, length = 100))
+x_mass1_line = 10.0.^collect(range(0.3, 4, length = 100))
 y_mass1_line = (1*10^0)./x_mass1_line
 
-x_mass2_line = 10.0.^collect(range(1.7, 4, length = 100))
+x_mass2_line = 10.0.^collect(range(0.3, 4, length = 100))
 y_mass2_line = (1*10^3)./x_mass2_line
 
-x_mass3_line = 10.0.^collect(range(1.7, 4, length = 100))
+x_mass3_line = 10.0.^collect(range(0.3, 4, length = 100))
 y_mass3_line = (5*10^6)./x_mass3_line
 
-x_mass4_line = 10.0.^collect(range(1.7, 4, length = 100))
+x_mass4_line = 10.0.^collect(range(0.3, 4, length = 100))
 y_mass4_line = (1*10^9)./x_mass4_line
 
-plot(x_relic_line, y_relic_line, fillrange = 1E7*ones(size(x_relic_line)), fillalpha = 0.35, c = 1, xlims = (70, 1E4), ylims = (1E-3, 1E7), title="V model",
+plot(x_relic_line, y_relic_line, fillrange = 1E7*ones(size(x_relic_line)), fillalpha = 0.35, c = 1, xlims = (2, 1E4), ylims = (1E-3, 1E7), title="V model",
 legend=false, ylabel = L"\Lambda/GeV", xlabel = L"m_Q/\Lambda", xscale = :log10, yscale = :log10)
 plot!(x_relic_line_fo_dil, y_relic_line_fo_dil, linestyle=:dash, seriescolor=:blue, linewidth = 3)
 #plot!(x_relic_line_fo_sq, y_relic_line_fo_sq, linestyle=:dash, seriescolor=:blue)
@@ -122,7 +122,7 @@ annotate!(7000, 0.005, text(L"\tau_{GB} > 1s", :black, :right, 12))
 annotate!(300, 1E6, text(L"\Omega_{DM} h^2>0.12", :black, :right, 12))
 #annotate!(3000, 1E5, text("w/o entropy dilution", :black, :right, 12))
 #annotate!(800, 30, text("FO only (+- dilution)", :black, :right, 12))
-savefig("Exclusion_plot_Vmodel_line_Testplot.png")
+savefig("Exclusion_plot_Vmodel_line.png")
 
 #=
 #Scatter plot to get a feeling for the result 

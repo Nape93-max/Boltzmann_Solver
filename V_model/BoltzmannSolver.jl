@@ -37,13 +37,15 @@ const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
 #Details on the parameter scan
-num_scales = 2
-num_masses = 2
+num_scales = 100
+num_masses = 100
 num_parameter_points = num_scales*num_masses
 array_scales = 10.0.^collect(range(-3, 7, length = num_scales)) #0 - 7 
-array_masses = 10.0.^collect(range(1.2, 4, length = num_masses)) # 2 - 4
+array_masses = 10.0.^collect(range(0.3, 4, length = num_masses)) # 2 - 4
+# mQ/Lambda < 2 (2 = 10^0.3), otherwise coupling becomes nonperturbative
 
 const g_quark = 4*Ndark*3 #degeneracy of the Dirac quark: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
+const g_Baryon = 4*6*Ndark #degeneracy of the baryon. 6 = 3*2*1 SU(2)L dofs and 4*Ndark is derived in the Overleaf document
 
 #initialise arrays of quantities that will be calculated and later written into results file
 xPT_data_vec = zeros(num_parameter_points)
@@ -65,14 +67,15 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     Lambda_dQCD = array_scales[i]
     m_quark = array_masses[j]*Lambda_dQCD
     Alpha_DM = running_coupling_from_pole(2*m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active
-    Alpha_dark = running_coupling_from_pole(m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active #dark gauge coupling at the mass scale m_quark
+    Alpha_dark = running_coupling_from_pole(m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #dark gauge coupling at the mass scale m_quark
     AlphaDM_data_vec[big_ind] = Alpha_dark
 
     BigConstant = bc_constant(m_quark)
     sigma0 = cross_section(m_quark, Alpha_DM)
+    sigma_baryon = baryon_sigma_v(Lambda_dQCD)
     sigma_data_vec[big_ind] = sigma0
     #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
-    Tcrit = 1.91*Lambda_dQCD #Temperature of the phase transition (parameters for SU(3) from 1605.08048)
+    Tcrit = 1.2*Lambda_dQCD #Temperature of the phase transition (parameters for SU(3) from 1605.08048)
     x_PT = m_quark/Tcrit 
     xPT_data_vec[big_ind] = x_PT
 
@@ -80,17 +83,17 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     R_pocket = pocket_radius(Lambda_dQCD)
     RPocket_data_vec[big_ind] = R_pocket
     
-    if array_masses[j] < 30
+    if array_masses[j] < 1.4 #10^1.4 = 25
         #First Quark freeze-out
         Yfo = quark_freeze_out(x_PT, m_quark, sigma0, BigConstant, g_quark)
         Yfo_data_vec[big_ind] = Yfo
 
         ### FOPT: Squeezeout step ###
-        Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
-        Ysqo_data_vec[big_ind] = Yx_squeezeout
+        Yx_squeezeout_temp = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3)) #temporary squeezeout value before the baryon freeze-out
         
         #Second baryon freeze-out
-        ###TO BE CONTINUED
+        Yx_squeezeout = baryon_freeze_out(x_PT, 100, m_quark, Yx_squeezeout_temp, sigma_baryon, BigConstant, g_Baryon, Alpha_dark, Ndark)
+        Ysqo_data_vec[big_ind] = Yx_squeezeout
     else
         #Quark freeze-out
         Yfo = quark_freeze_out(x_PT, m_quark, sigma0, BigConstant, g_quark)
@@ -128,8 +131,8 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
 end
 
 #Initialise final output file with data
-results_file = open("V_model_little_scan.csv", "w")
-IOStream("V_model_little_scan.csv")
+results_file = open("V_model_scan.csv", "w")
+IOStream("V_model_scan.csv")
 write(results_file, "m/GeV, Lambda/GeV, x_PT, Alpha(m), sigma0, RPocket/Lambda, Yfo, Ysqo, xGBfo, TMReq/GeV, Gamma_GB/GeV, dilution_factor, Omegah2\n")
 for i in 1:num_scales #Write out data
     for j in 1:num_masses
