@@ -1,12 +1,12 @@
 include("NplusL_Header.jl") #Include important functions 
 
-num_scales = 100
-num_masses = 100
+num_scales = 10
+num_masses = 10
 num_deltas = 10
 num_Yukawas = 10
 num_parameter_points = num_scales*num_masses*num_deltas*num_Yukawas
 array_scales = 10.0.^collect(range(-3, 7, num_scales)) #10.0.^collect(range(0, 7, length = num_scales)) 
-array_masses = 10.0.^collect(range(1.2, 4, num_masses)) 
+array_masses = 10.0.^collect(range(0, 4, num_masses)) 
 array_deltas = 10.0.^collect(range(0, 2, num_deltas)) 
 array_Yukawas = 10.0.^collect(range(-7, 0, num_Yukawas)) 
 
@@ -31,10 +31,10 @@ Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:num_scales, 1:num_
     m_L = (mass_delta+1)*m_N 
     ydark = array_Yukawas[l] #dark Yukawa coupling. No running implemented. 
 
-    Alpha_DM = running_coupling_from_pole(m_N, Lambda_dQCD, 11*Ndark/3)
+    Alpha_DM = running_coupling_from_pole(2*m_N, Lambda_dQCD, (11*Ndark-2)/3)
     AlphaDM_data_vec[big_ind] = Alpha_DM
 
-    Tcrit = 1.91*Lambda_dQCD #Temperature of the phase transition
+    Tcrit = 1.2*Lambda_dQCD #Temperature of the phase transition
     x_PT = m_N/Tcrit 
     xPT_data_vec[big_ind] = x_PT
 

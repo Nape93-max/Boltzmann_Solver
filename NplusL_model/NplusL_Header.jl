@@ -26,11 +26,11 @@ function cross_section_contributions(m_N, m_L, Lambda_dQCD, ydark)
     return sigmaNN, sigmaNL, sigmaLL
 end
 
-function cross_section(x, m_N, m_L, Lambda_dQCD, ydark, sigmaNN, sigmaNL, sigmaLL) #Calculate the averaged cross section according to Griest and Seckel
+function cross_section(x, m_N, m_L, sigmaNN, sigmaNL, sigmaLL) #Calculate the averaged cross section according to Griest and Seckel
     # with the aid of my Mathematica notebook
     EquilibriumYieldN = Yeq(g_N, h_eff_dof(m_N/x), x)
     EquilibriumYieldL = Yeq(g_L, h_eff_dof(m_N/x), m_L/m_N*x)
-    EquilibriumYieldDM = EquilibriumYieldN + EquilibriumYieldL
+    #EquilibriumYieldDM = EquilibriumYieldN + EquilibriumYieldL
 
     #=
     #Here the thermally averaged cross section is read in. 
@@ -49,9 +49,9 @@ function cross_section(x, m_N, m_L, Lambda_dQCD, ydark, sigmaNN, sigmaNL, sigmaL
         Yeq_ratios = EquilibriumYieldL/EquilibriumYieldN
     end
     r_GS_N = 1/(1 + Yeq_ratios) #ratios as defined in Griest and Seckel
-    r_GS_L = Yeq_ratios/(1 + Yeq_ratios)
+    #r_GS_L = Yeq_ratios/(1 + Yeq_ratios)
 
-    sigma_v_averaged = (sigmaNN*r_GS_N*r_GS_N + 2*sigmaNL*r_GS_N*r_GS_N + sigmaLL*r_GS_N*r_GS_N) #Effective xs according to Griest and Seckel
+    return sigmaNN*r_GS_N*r_GS_N + 2*sigmaNL*r_GS_N*r_GS_N + sigmaLL*r_GS_N*r_GS_N #Effective xs according to Griest and Seckel
 end
 
 function coannihilation_freeze_out(x_PT, m_N, m_L, Lambda_dQCD, ydark) # function that calculates the yield of the quark freeze-out
@@ -85,6 +85,7 @@ function coannihilation_freeze_out(x_PT, m_N, m_L, Lambda_dQCD, ydark) # functio
     sigma_v_averaged = zeros(Npoints) #Calculation of the averaged cross section
     (sigma_NN, sigma_NL, sigma_LL) = cross_section_contributions(m_N, m_L, Lambda_dQCD, ydark)
 
+    #=  #Interpolation has proven to be slower than direct computation!
     #BEGIN BLOCK Interpolation
     num_raw_data = 100
     sigma_v_raw_data = ones(num_raw_data)
@@ -99,16 +100,17 @@ function coannihilation_freeze_out(x_PT, m_N, m_L, Lambda_dQCD, ydark) # functio
 
     interpolation_coeffs = sigma_v_interpolation(x_raw_data_vec, sigma_v_raw_data) ###array of interpolation coefficients
     #### END interpolation of sigma_v
+    =#
 
     for i in 1:Npoints
-        sigma_v_averaged[i] = sigma_v_cspline(xvec[i], x_raw_data_vec, sigma_v_raw_data, sigma_v_raw_data_first_entry, interpolation_coeffs)
-        #sigma_v_averaged[i] = cross_section(xvec[i], m_N, m_L, Lambda_dQCD, ydark, sigma_NN, sigma_NL, sigma_LL)
+        #sigma_v_averaged[i] = sigma_v_cspline(xvec[i], x_raw_data_vec, sigma_v_raw_data, sigma_v_raw_data_first_entry, interpolation_coeffs)
+        sigma_v_averaged[i] = cross_section(xvec[i], m_N, m_L, sigma_NN, sigma_NL, sigma_LL)
     end
 
     #Solution to the Boltzmann equation for the first freeze-out
     for i = 2:Npoints
         W_old = Wx[i-1]
-        Wx[i] = Newton_Raphson_step_coannihilation(xvec[i], W_old, mod_BC*sigma_v_averaged[i]/xvec[i], g_N, g_L, h_eff_dof_vec[i], mass_ratio)
+        Wx[i] = Newton_Raphson_step_coannihilation(xvec[i], W_old, mod_BC*g_star_eff_vec[i]*sigma_v_averaged[i]/xvec[i], g_N, g_L, h_eff_dof_vec[i], mass_ratio)
     end
     Yx = exp.(Wx)
     return Yx[Npoints-1]
@@ -166,7 +168,9 @@ const MZ = 91.1876 # Z boson mass in GeV
 const Mtop = 173 # Top quark mass in GeV
 const alpha_W_MZ = 0.0342556 # Source?!
 const alpha_W_Mtop = 0.0334 # The weak gauge coupling at the top quark mass (All from arxiv: 1307.3536)
-const alpha_Y_Mtop = 0.0102 # Source: arxiv: 1307.3536#Constant parameters for entropy dilution
+const alpha_Y_Mtop = 0.0102 # Source: arxiv: 1307.3536
+
+#Constant parameters for entropy dilution
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 const Relic_abundance_limit = 0.12 
