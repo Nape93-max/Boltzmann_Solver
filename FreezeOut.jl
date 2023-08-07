@@ -292,7 +292,10 @@ function entropy_density(T) #Returns the entropy density of a given species
     s = 2*pi*pi/45*h_eff_dof(T)*T^3
 end
 
-function quark_freeze_out(x_final, m, sigma, BC, g_dm)
+function quark_freeze_out(x_final, m, sigma, BC, g_dm) #Function that calculates the freeze-out of a quark for a constant <sigma v>.
+    # m is the quark mass, sigma is the constant <sigma v>, BC is a numerical constant in the Boltzmann equation
+    #g_dm is the degeneracy of the dark quark.
+    
     #Define parameters of implicit Euler backward solution method
     Delta_t = 1E-4
     x_initial = 0.5
@@ -340,4 +343,63 @@ function quark_freeze_out(x_final, m, sigma, BC, g_dm)
 
     Yx = exp.(Wx)
     return Yx[Npoints-1]
+end
+
+function baryon_freeze_out(x_initial, x_final, mq, Yquark_PT, sigma, BC, g_Baryon, alpha_binding, Ndark) 
+    #function that calculates the freeze-out of the baryon-antibaryon annihilations for constant <sigma v>
+    # mq is the constituent quark mass, Yquark_PT is the quark abundance at the phase transition
+    # sigma is the constant <sigma v> of baryon-antibaryon annihilation
+    # BC is a numerical constant in the Boltzmann equation, g_Baryon is the degeneracy of the dark baryon.
+    # alpha_binding is the value of the dark coupling appearing in the baryon binding energy. Ndark is the Nc of the dark gauge group
+    
+    #Define parameters of implicit Euler backward solution method
+    Delta_t = 1E-4
+    t_initial = log(x_initial)
+    t_final = log(x_final)
+
+    #First define initial conditions:
+    tvec = collect(t_initial:Delta_t:t_final)
+    xvec = exp.(tvec)
+    Npoints = length(tvec)
+
+    g_star_eff_vec = eff_dof_sqrt.(mq./xvec) #Sqrt of effective degrees of freedom
+    h_eff_dof_vec = h_eff_dof.(mq./xvec) #Effective entropic dofs
+
+    EquilibriumYieldB = zeros(Npoints)
+    for i = 1:Npoints
+        EquilibriumYieldB[i] = Yeq_baryon(g_Baryon, h_eff_dof(mq/xvec[i]), xvec[i], alpha_binding, Ndark)
+    end
+
+    #Here the thermally averaged cross section is read in. 
+    #sigma_v_file = DataFrame(CSV.File("Sigma_eff.txt"))
+    #sigma_v_x_values = sigma_v_file[!,1]
+    #sigma_v_y_values = sigma_v_file[!,2]  #Not yet ready
+    #sigma_v_y_values = ones(500) #for evaluation w.o. SE and BSF
+
+    sigma_v_averaged = ones(Npoints) #Initialise array for interpolated annihaltion xs
+    #sigma_v_averaged_coeffs = sigma_v_interpolation(sigma0, sigma_v_x_values, sigma_v_y_values) #Cubic spline fit coefficient vector (beta, gamma, delta)
+
+    for i in 1:Npoints
+        #sigma_v_averaged[i] = sigma_v_cspline(xvec[i], sigma_v_x_values, sigma_v_y_values, sigma0, sigma_v_averaged_coeffs)
+        sigma_v_averaged[i] = sigma
+    end
+
+    Wx = zeros(Npoints)
+    Yx = zeros(Npoints)
+    Yx[1] = Yquark_PT
+    Wx[1] = log(Yx[1])
+
+    modified_BC = BC*Delta_t*0.5 #Modified BC make code more efficient    
+    #Solution to the Boltzmann equation for the first freeze-out
+    for i = 2:Npoints
+        W_old = Wx[i-1]
+        Wx[i] = Newton_Raphson_step_Baryon(xvec[i], W_old, g_star_eff_vec[i]*modified_BC/xvec[i]*sigma_v_averaged[i], g_Baryon, h_eff_dof_vec[i], alpha_binding, Ndark)
+    end
+
+    Yx = exp.(Wx)
+    return Yx[Npoints-1]
+end
+
+function baryon_sigma_v(Lambda) #Returns <sigma v> for baryons
+    return 4*pi/(Lambda*Lambda)
 end
