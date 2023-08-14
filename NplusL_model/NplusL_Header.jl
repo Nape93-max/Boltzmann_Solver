@@ -156,7 +156,7 @@ function glueball_decay(m_glueball, Lambda_dQCD, m_N, m_L, ydark)
     decay_const_GB = 3.06*m_glueball^3/(4*pi*Alpha_DM_GB_decay) #decay constant of the gluon after Juknevich. 
     Gamma_GB_dim8 = Alpha_DM_GB_decay*Alpha_DM_GB_decay/(8*pi*m_L^8)*1/3600*m_glueball^3*(decay_const_GB)^2*(Alpha_Y_GB_decay*Alpha_Y_GB_decay/4 + 1.5*Alpha_weak_GB_decay*Alpha_weak_GB_decay) #dim 8 Glueball decay rate after Juknevich.
     Gamma_GB_dim6 = (ydark*ydark*Alpha_DM_GB_decay*decay_const_GB/(m_L*m_N))^2/(72*pi^3*m_glueball)  #dim 6 Glueball decay rate after Juknevich.
-    Gamma_GB = Gamma_GB_dim6 + Gamma_GB_dim8
+    return Gamma_GB_dim6 + Gamma_GB_dim8
 end
 
 #Define constant physics parameters
@@ -174,6 +174,3 @@ const alpha_Y_Mtop = 0.0102 # Source: arxiv: 1307.3536
 const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 const Relic_abundance_limit = 0.12 
-
-const g_N = 4*Ndark #degeneracy of the Dirac quark N: (Spin x Particle-Antiparticle) x DarkColour
-const g_L = 4*Ndark*2 #degeneracy of the Dirac quark L: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity

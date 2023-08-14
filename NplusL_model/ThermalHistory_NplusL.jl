@@ -48,7 +48,7 @@ mod_BC = 0.5*BigConstant*Delta_t #modified Big Constant
 sigma_v_averaged = zeros(Npoints) #Calculation of the averaged cross section
 (sigma_NN, sigma_NL, sigma_LL) = cross_section_contributions(m_N, m_L, Lambda_dQCD, ydark)
 
-#BEGIN BLOCK Interpolation
+#= #Interpolation turns out to be slower than direct calculation#BEGIN BLOCK Interpolation
 num_raw_data = 100
 sigma_v_raw_data = ones(num_raw_data)
 x_raw_data_vec = zeros(num_raw_data)
@@ -62,10 +62,11 @@ end
 
 interpolation_coeffs = sigma_v_interpolation(x_raw_data_vec, sigma_v_raw_data) ###array of interpolation coefficients
 ####
+=#
 
 for i in 1:Npoints
-    sigma_v_averaged[i] = sigma_v_cspline(xvec[i], x_raw_data_vec, sigma_v_raw_data, sigma_v_raw_data_first_entry, interpolation_coeffs)
-    #sigma_v_averaged[i] = cross_section(xvec[i], m_N, m_L, Lambda_dQCD, ydark, sigma_NN, sigma_NL, sigma_LL)
+    #sigma_v_averaged[i] = sigma_v_cspline(xvec[i], x_raw_data_vec, sigma_v_raw_data, sigma_v_raw_data_first_entry, interpolation_coeffs)
+    sigma_v_averaged[i] = cross_section(xvec[i], m_N, m_L, Lambda_dQCD, ydark, sigma_NN, sigma_NL, sigma_LL)
 end
 
 #Solution to the Boltzmann equation for the first freeze-out

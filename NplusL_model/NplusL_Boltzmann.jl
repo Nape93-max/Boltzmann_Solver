@@ -1,14 +1,18 @@
 include("NplusL_Header.jl") #Include important functions 
 
-num_scales = 10
-num_masses = 10
+num_scales = 50
+num_masses = 50
 num_deltas = 10
 num_Yukawas = 10
 num_parameter_points = num_scales*num_masses*num_deltas*num_Yukawas
 array_scales = 10.0.^collect(range(-3, 7, num_scales)) #10.0.^collect(range(0, 7, length = num_scales)) 
-array_masses = 10.0.^collect(range(0, 4, num_masses)) 
+array_masses = 10.0.^collect(range(0.3, 4, num_masses)) # mQ/Lambda < 2 (2 = 10^0.3), otherwise coupling becomes nonperturbative
 array_deltas = 10.0.^collect(range(0, 2, num_deltas)) 
 array_Yukawas = 10.0.^collect(range(-7, 0, num_Yukawas)) 
+
+const g_N = 4*Ndark #degeneracy of the Dirac quark N: (Spin x Particle-Antiparticle) x DarkColour
+const g_L = 4*Ndark*2 #degeneracy of the Dirac quark L: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
+const g_Baryon = 4*Ndark #Derived in the overleaf document
 
 #initialise arrays of quantities that will be calculated and later written into results file
 xPT_data_vec = zeros(num_parameter_points)
@@ -29,7 +33,8 @@ Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:num_scales, 1:num_
     m_N = array_masses[j]*Lambda_dQCD
     mass_delta = array_deltas[k]
     m_L = (mass_delta+1)*m_N 
-    ydark = array_Yukawas[l] #dark Yukawa coupling. No running implemented. 
+    ydark = array_Yukawas[l] #dark Yukawa coupling. No running implemented.
+    sigma_baryon = baryon_sigma_v(Lambda_dQCD) 
 
     Alpha_DM = running_coupling_from_pole(2*m_N, Lambda_dQCD, (11*Ndark-2)/3)
     AlphaDM_data_vec[big_ind] = Alpha_DM
@@ -42,13 +47,29 @@ Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:num_scales, 1:num_
     R_pocket = pocket_radius(Lambda_dQCD)
     RPocket_data_vec[big_ind] = R_pocket
 
-    #FreezeOut
-    Yfo = coannihilation_freeze_out(x_PT, m_N, m_L, Lambda_dQCD, ydark)
-    Yfo_data_vec[big_ind] = Yfo
+    BC = bc_constant(m_N)
 
-    ### FOPT: Squeezeout step ###
-    Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
-    Ysqo_data_vec[big_ind] = Yx_squeezeout
+    if array_masses[j] < 1.4 #10^1.4 = 25
+        #First Quark freeze-out
+        Yfo = coannihilation_freeze_out(x_PT, m_N, m_L, Lambda_dQCD, ydark)
+        Yfo_data_vec[big_ind] = Yfo
+
+        ### FOPT: Squeezeout step ###
+        Yx_squeezeout_temp = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3)) #temporary squeezeout value before the baryon freeze-out
+        
+        #Second baryon freeze-out
+        Yx_squeezeout = baryon_freeze_out(x_PT, 1000, m_N, Yx_squeezeout_temp, sigma_baryon, BC, g_Baryon, Alpha_DM, Ndark)
+
+        Ysqo_data_vec[big_ind] = Yx_squeezeout
+    else
+        #First Quark freeze-out
+        Yfo = coannihilation_freeze_out(x_PT, m_N, m_L, Lambda_dQCD, ydark)
+        Yfo_data_vec[big_ind] = Yfo
+
+        ### FOPT: Squeezeout step ###
+        Yx_squeezeout = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3))
+        Ysqo_data_vec[big_ind] = Yx_squeezeout
+    end
 
     ### Entropy dilution due to glueball decay ###
     m_glueball = 7*Lambda_dQCD #Mass of the lightest 0++ glueball

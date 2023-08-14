@@ -37,8 +37,8 @@ const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
 #Details on the parameter scan
-num_scales = 100
-num_masses = 100
+num_scales = 30
+num_masses = 30
 num_parameter_points = num_scales*num_masses
 array_scales = 10.0.^collect(range(-3, 7, length = num_scales)) #0 - 7 
 array_masses = 10.0.^collect(range(0.3, 4, length = num_masses)) # 2 - 4

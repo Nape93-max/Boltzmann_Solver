@@ -289,7 +289,7 @@ function running_coupling_from_scale(Q, mu, alphamu, beta0) #Running coupling at
 end
 
 function entropy_density(T) #Returns the entropy density of a given species
-    s = 2*pi*pi/45*h_eff_dof(T)*T^3
+    return 2*pi*pi/45*h_eff_dof(T)*T^3
 end
 
 function quark_freeze_out(x_final, m, sigma, BC, g_dm) #Function that calculates the freeze-out of a quark for a constant <sigma v>.
