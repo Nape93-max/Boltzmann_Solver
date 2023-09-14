@@ -1,5 +1,6 @@
 using SpecialFunctions
 using CSV, DataFrames
+using LambertW
 
 #Define constant physics parameters
 const Mpl = 1.221E19
@@ -8,6 +9,7 @@ const T0 = 2.35E-13
 const rho_crit = 3.724E-47
 const s0 = 2.225E-38
 const reduced_Hubble_squared = 0.67*0.67
+const Higgs_VEV = 246
 
 #Read and define degrees of freedom 
 dof_file = DataFrame(CSV.File("DegreesOfFreedom.txt"))
@@ -81,13 +83,13 @@ function Ebin_baryon_per_mass(alpha, Nc) # Gives the binding energy of a baryon 
     c1 = 0.013
     c2 = 0.021
     c3 = 0.023
-    Ebin = alpha*alpha*Nc*(-c3 + Nc*(c2 + c1*Nc))
+    return alpha*alpha*Nc*(-c3 + Nc*(c2 + c1*Nc))
 end
 
 function Yeq_baryon(g_deg, gS, x, alpha, Nc) # Gives the equilibrium yield of a baryon with degeneracy g_deg, made of Nc quarks
     # alpha is evaluated at the quark mass scale (mQ), x = m_Q/T and gS are the relativistic entropic degrees of freedom
     y = (Nc - Ebin_baryon_per_mass(alpha, Nc))*x
-    Yeq_B = 90/(2*pi)^3.5*g_deg/gS*y*sqrt(y)*exp(-y)
+    return  90/(2*pi)^3.5*g_deg/gS*y*sqrt(y)*exp(-y)
 end
 
 function eff_dof_sqrt(T)
@@ -288,6 +290,12 @@ function running_coupling_from_scale(Q, mu, alphamu, beta0) #Running coupling at
     return 1/(1/alphamu + beta0*log(Q/mu)/(2*pi))
 end
 
+function alpha_bin_baryon(Nc, beta_0, mQ, Lambda) #alpha_g^B as defined in Julias 1805.01200 for baryons in the attractive channel with mu = m_Q/Ndark
+    c = 2*pi/beta_0
+    CF = (Nc*Nc-1)/(2*Nc)
+    return CF*c/lambertw(c*mQ/(Lambda*Nc))
+end
+ 
 function entropy_density(T) #Returns the entropy density of a given species
     return 2*pi*pi/45*h_eff_dof(T)*T^3
 end
@@ -400,6 +408,6 @@ function baryon_freeze_out(x_initial, x_final, mq, Yquark_PT, sigma, BC, g_Baryo
     return Yx[Npoints-1]
 end
 
-function baryon_sigma_v(Lambda) #Returns <sigma v> for baryons
-    return 4*pi/(Lambda*Lambda)
+function baryon_sigma_v(Nc, alpha, mQ) #Returns <sigma v> for baryons. Returns rearrangement cross section as stated in the Overleaf document.
+    return 4*sqrt(2)*Nc*pi/(alpha*mQ^2)
 end
