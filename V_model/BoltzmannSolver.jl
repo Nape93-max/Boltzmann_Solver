@@ -14,11 +14,6 @@ function glueball_decay(m_glueball, m_quark, Alpha_DM)
     Gamma_GB = (Alpha_weak_GB_decay*Alpha_DM_GB_decay)^2/(pi*m_quark^8)*1/1200*m_glueball^3*(decay_const_GB)^2 #Glueball decay rate after Juknevich. 
 end
 
-function rearrangement_cross_section(mq, alpha, x, xc) #returns sigma_v_RA depending on whether x > xc (rearrangement) or x < xc (pert. cross section)
-    #mq is the dark quark mass and alpha is the coupling at the annihilation scale
-    return 1
-end
-
 include("../FreezeOut.jl") #Include important functions regarding freeze-out
 include("../SqueezeOut.jl") #Include important functions regarding seeze-out and GB decay
 
@@ -37,8 +32,8 @@ const R_max = 2.5E-4 #highest possible entropy ratio after the PT
 const BBN_lifetime = 6.58*1E-25 #Lower bound on glueball decay rate.
 
 #Details on the parameter scan
-num_scales = 30
-num_masses = 30
+num_scales = 100
+num_masses = 100
 num_parameter_points = num_scales*num_masses
 array_scales = 10.0.^collect(range(-3, 7, length = num_scales)) #0 - 7 
 array_masses = 10.0.^collect(range(0.3, 4, length = num_masses)) # 2 - 4
@@ -68,11 +63,14 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
     m_quark = array_masses[j]*Lambda_dQCD
     Alpha_DM = running_coupling_from_pole(2*m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #At the annihilation scale, the quark is active
     Alpha_dark = running_coupling_from_pole(m_quark, Lambda_dQCD, 11*Ndark/3-2*3/3) #dark gauge coupling at the mass scale m_quark
+    Alpha_Baryon = alpha_bin_baryon(Ndark, 11*Ndark/3-2*3/3, m_quark, Lambda_dQCD) #alpha_g^B as defined in Julias 1805.01200 
+    #for baryons in the attractive channel with mu = m_Q/Ndark
     AlphaDM_data_vec[big_ind] = Alpha_dark
+    m_Baryon = Ndark*m_quark*(1-Ebin_baryon_per_mass(Alpha_dark, Ndark))
 
     BigConstant = bc_constant(m_quark)
     sigma0 = cross_section(m_quark, Alpha_DM)
-    sigma_baryon = baryon_sigma_v(Lambda_dQCD)
+    sigma_baryon = baryon_sigma_v(Ndark, Alpha_Baryon, m_quark)
     sigma_data_vec[big_ind] = sigma0
     #Lambda_dQCD = Landau_pole(m_quark, Alpha_DM, 11) #beta0 = 11*Nc/3
     Tcrit = 1.2*Lambda_dQCD #Temperature of the phase transition (parameters for SU(3) from 1605.08048)
@@ -89,7 +87,8 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
         Yfo_data_vec[big_ind] = Yfo
 
         ### FOPT: Squeezeout step ###
-        Yx_squeezeout_temp = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3)) #temporary squeezeout value before the baryon freeze-out
+        Yx_squeezeout_temp = 1.5/pi*sqrt(15*Yfo/(2*pi*h_eff_dof(Tcrit)*R_pocket^3)) #temporary squeezeout value before
+        # the baryon freeze-out
         
         #Second baryon freeze-out
         Yx_squeezeout = baryon_freeze_out(x_PT, 100, m_quark, Yx_squeezeout_temp, sigma_baryon, BigConstant, g_Baryon, Alpha_dark, Ndark)
@@ -126,7 +125,7 @@ Threads.@threads for (i,j) in collect(Iterators.product(1:length(array_scales), 
 
     ### Calculation of the relic abundance ###
     x_today = m_quark/T0
-    Omega_relic = reduced_Hubble_squared*Yx_dilution*s0*m_quark/rho_crit
+    Omega_relic = reduced_Hubble_squared*Yx_dilution*s0*m_Baryon/(rho_crit*Ndark)
     Omegah2_data_vec[big_ind] = Omega_relic
 end
 
