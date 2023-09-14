@@ -159,6 +159,10 @@ function glueball_decay(m_glueball, Lambda_dQCD, m_N, m_L, ydark)
     return Gamma_GB_dim6 + Gamma_GB_dim8
 end
 
+function DM_mass_correction(m_N, delta, y_d) #implements mixing as shown in the Overleaf document. 
+    return abs(((delta + 2) - sqrt(delta*delta + 2*y_d*Higgs_VEV*Higgs_VEV/(m_N*m_N)))/2)
+end
+
 #Define constant physics parameters
 const Ndark = 3. #Dark SU(N) parameter N
 const NdarkAdjoint = Ndark*Ndark-1

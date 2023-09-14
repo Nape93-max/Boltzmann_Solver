@@ -1,14 +1,14 @@
 include("NplusL_Header.jl") #Include important functions 
 
-num_scales = 50
-num_masses = 50
-num_deltas = 10
-num_Yukawas = 10
+num_scales = 40
+num_masses = 40
+num_deltas = 3
+num_Yukawas = 3
 num_parameter_points = num_scales*num_masses*num_deltas*num_Yukawas
 array_scales = 10.0.^collect(range(-3, 7, num_scales)) #10.0.^collect(range(0, 7, length = num_scales)) 
 array_masses = 10.0.^collect(range(0.3, 4, num_masses)) # mQ/Lambda < 2 (2 = 10^0.3), otherwise coupling becomes nonperturbative
-array_deltas = 10.0.^collect(range(0, 2, num_deltas)) 
-array_Yukawas = 10.0.^collect(range(-7, 0, num_Yukawas)) 
+array_deltas = collect(range(0, 100, num_deltas)) 
+array_Yukawas = 10.0.^collect(range(-7, 0, num_Yukawas)) #y_d must be smaller than delta*m_N/VEV in order to assure small mixing
 
 const g_N = 4*Ndark #degeneracy of the Dirac quark N: (Spin x Particle-Antiparticle) x DarkColour
 const g_L = 4*Ndark*2 #degeneracy of the Dirac quark L: (Spin x Particle-Antiparticle) x DarkColour x weak multiplicity
@@ -34,10 +34,18 @@ Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:num_scales, 1:num_
     mass_delta = array_deltas[k]
     m_L = (mass_delta+1)*m_N 
     ydark = array_Yukawas[l] #dark Yukawa coupling. No running implemented.
-    sigma_baryon = baryon_sigma_v(Lambda_dQCD) 
 
-    Alpha_DM = running_coupling_from_pole(2*m_N, Lambda_dQCD, (11*Ndark-2)/3)
+    println("Calculating Lambda = "*"$Lambda_dQCD"*" GeV, mN = "*"$m_N"*" GeV, delta = "*"mL = "*"$m_L"*" GeV, yd = "*"$ydark")
+
+    m_DM_quark = m_N*DM_mass_correction(m_N, mass_delta, ydark) #mass of the quark that makes up the DM candidate in the end (N mixes with L).
+ 
+    Alpha_DM = running_coupling_from_pole(2*m_N, Lambda_dQCD, (11*Ndark-2)/3) #At the annihilation scale, the quark is active
+    Alpha_dark = running_coupling_from_pole(m_DM_quark, Lambda_dQCD, 11*Ndark/3) #dark gauge coupling at the mass scale m_quark
     AlphaDM_data_vec[big_ind] = Alpha_DM
+    Alpha_Baryon = alpha_bin_baryon(Ndark, 11*Ndark/3-2*3/3, m_N, Lambda_dQCD) #alpha_g^B as defined in Julias 1805.01200 
+    m_Baryon = Ndark*m_DM_quark*(1-Ebin_baryon_per_mass(Alpha_dark, Ndark))
+
+    sigma_baryon = baryon_sigma_v(Ndark, Alpha_Baryon, m_DM_quark) 
 
     Tcrit = 1.2*Lambda_dQCD #Temperature of the phase transition
     x_PT = m_N/Tcrit 
@@ -94,7 +102,7 @@ Threads.@threads for (i,j,k,l) in collect(Iterators.product(1:num_scales, 1:num_
 
     ### Calculation of the relic abundance ###
     x_today = m_N/T0
-    Omega_relic = reduced_Hubble_squared*Yx_dilution*s0*m_N/rho_crit
+    Omega_relic = reduced_Hubble_squared*Yx_dilution*s0*m_Baryon/(rho_crit*Ndark)
     Omegah2_data_vec[big_ind] = Omega_relic
 end
 
